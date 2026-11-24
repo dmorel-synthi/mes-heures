@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#E4032E">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Mes heures">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>Mes heures</title>
+<style>
+/* VOICE  : outil d'atelier, sobre et rassurant, gros boutons utilisables avec des mains pressées
+   IDEA   : la feuille de temps papier, mais qui se remplit en un geste et fait ses totaux seule
+   PICTURE: la carte du jour (horaire prévu, heures, bouton valider) est l'élément central
+   COLOUR : charte Sinthylène — blanc, noir, gris #D9D9D9/#F2F2F2, rouge #E4032E/#C00000 en accent
+   LAYOUT : une colonne mobile, barre d'onglets en bas, 560 px max sur grand écran */
+:root{color-scheme:light dark;
+--bg:light-dark(#fff,#151515);--ink:light-dark(#1b1b1b,#f1f1f1);--mute:light-dark(#5e5e5e,#a9a9a9);
+--line:light-dark(#D9D9D9,#3b3b3b);--soft:light-dark(#F2F2F2,#222);--red:light-dark(#C00000,#ff6b6b);--brand:#E4032E}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Aptos,"Segoe UI",Calibri,Roboto,Arial,sans-serif;overflow-x:clip}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
+.top{position:sticky;top:0;z-index:5;background:var(--bg);padding-top:env(safe-area-inset-top)}
+.band{height:6px;background:#D9D9D9}.band+.band{height:4px;background:#FF0000}
+.hd{display:flex;align-items:center;gap:12px;max-width:560px;margin:0 auto;padding:10px 16px;border-bottom:1px solid var(--line)}
+.hd img{height:26px;background:#fff;border-radius:4px;padding:2px 4px}
+.hd .t{flex:1;font-weight:700;font-size:18px;line-height:1.15}
+.hd .n{font-size:14px;color:var(--mute);font-weight:400;display:block}
+main{max-width:560px;margin:0 auto;padding:14px 16px calc(96px + env(safe-area-inset-bottom))}
+h1{font-size:24px;line-height:1.15;margin:4px 0 4px;color:var(--red);font-weight:700}
+h2{font-size:18px;margin:22px 0 8px;color:var(--red)}
+h3{font-size:17px;margin:0 0 8px}
+p{margin:0 0 12px}
+.mute{color:var(--mute);font-size:14px}
+.card{border:1px solid var(--line);border-radius:14px;padding:16px;margin:12px 0;background:var(--bg)}
+.view{display:none}.view.on{display:block}
+/* Saisie */
+.daynav{display:flex;align-items:center;gap:8px}
+.daynav .c{flex:1;text-align:center}
+.daynav b{display:block;font-size:20px;text-transform:capitalize;line-height:1.2}
+.daynav span{font-size:14px;color:var(--mute)}
+.ic{width:48px;height:48px;border-radius:12px;border:1px solid var(--line);background:var(--soft);font-size:26px;line-height:1}
+.week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;margin:12px 0 4px}
+.wd{height:56px;border-radius:10px;border:1px solid var(--line);background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:13px;line-height:1.1;padding:0}
+.wd b{font-size:16px}
+.wd i{width:8px;height:8px;border-radius:50%;margin-top:4px;border:1.5px solid transparent}
+.wd.ok i{background:var(--ink)}.wd.abs i{background:var(--mute)}
+.wd.miss i{border-color:var(--brand)}.wd.miss{border-color:var(--brand)}
+.wd.off{color:var(--mute)}
+.wd.sel{outline:3px solid var(--ink);outline-offset:-1px}
+.wd.today b{text-decoration:underline;text-underline-offset:3px}
+.prevu{font-size:15px;color:var(--mute);margin-bottom:12px}
+.prevu b{color:var(--ink)}
+.types{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:14px}
+.ty{min-height:48px;border-radius:10px;border:1px solid var(--line);background:var(--soft);font-size:14px;line-height:1.15;padding:6px}
+.ty.sel{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:700}
+.hval{font-size:56px;font-weight:700;text-align:center;line-height:1.05;font-variant-numeric:tabular-nums;margin:4px 0 10px;white-space:nowrap}
+.steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.st{height:52px;border-radius:12px;border:1px solid var(--line);background:var(--soft);font-weight:700;font-size:16px}
+.delta{text-align:center;margin:12px 0 2px;font-size:17px;min-height:26px}
+.delta b{color:var(--red)}
+.lnk{background:none;border:0;color:var(--ink);text-decoration:underline;font-size:14px;padding:8px 0;min-height:40px}
+label.f{display:block;font-size:14px;color:var(--mute);margin:14px 0 4px}
+textarea,input[type=text],input[type=email],input[type=date],input:not([type]){width:100%;font-size:16px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--bg)}
+.primary{display:block;width:100%;min-height:58px;border:0;border-radius:14px;background:var(--brand);color:#fff;font-weight:700;font-size:18px;margin-top:16px;padding:8px 14px}
+.primary:disabled{background:var(--line);color:var(--mute)}
+.second{display:block;width:100%;min-height:50px;border:1px solid var(--ink);border-radius:12px;background:var(--bg);font-weight:700;margin-top:10px;padding:8px 14px;text-align:center;text-decoration:none}
+a.primary,a.second,a.sm{display:flex;align-items:center;justify-content:center;text-decoration:none}a.primary{color:#fff}a.second,a.sm{color:var(--ink)}
+.primary.done{background:var(--ink);color:var(--bg)}
+table.hor{font-size:13px}table.hor th,table.hor td{padding:5px 4px}
+.tot2{white-space:nowrap;font-size:15px}
+.saved{text-align:center;font-size:14px;color:var(--mute);margin-top:8px;min-height:20px}
+/* Mois */
+.mnav{display:flex;align-items:center;gap:8px}
+.mnav .c{flex:1;text-align:center}
+.mnav h1{margin:0;text-transform:capitalize}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:14px 0}
+.kpi{background:var(--soft);border-radius:12px;padding:10px 6px;text-align:center}
+.kpi b{display:block;font-size:clamp(17px,5vw,22px);white-space:nowrap;font-variant-numeric:tabular-nums}
+.kpi span{font-size:12px;color:var(--mute)}
+.kpi.alert b{color:var(--red)}
+.wk{border:1px solid var(--line);border-radius:14px;margin:12px 0;overflow:hidden}
+.wk h3{background:var(--soft);margin:0;padding:10px 14px;font-size:15px;display:flex;justify-content:space-between;gap:8px}
+.wk h3 span{font-weight:400;color:var(--mute)}
+.row{display:grid;grid-template-columns:5.2em 1fr auto;gap:8px;align-items:center;width:100%;min-height:46px;padding:6px 14px;border:0;border-top:1px solid var(--line);background:none;text-align:left}
+.row .d{font-weight:700;text-transform:capitalize}
+.row .x{font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:700}
+.row .s{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .s small{color:var(--mute)}
+.row.miss .s{color:var(--red);font-weight:700}
+.row.out{opacity:.72}
+.tot{border-top:2px solid var(--ink);padding:10px 14px;font-size:14px}
+.tot b{font-variant-numeric:tabular-nums}
+.state{font-size:14px;color:var(--mute);text-align:center;margin-top:8px}
+/* Tableaux réglages / responsable */
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{border:1px solid var(--line);padding:6px 8px;text-align:left}
+th{background:var(--soft)}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.scroll{overflow-x:auto}
+.emp{border:1px solid var(--line);border-radius:12px;padding:12px;margin:10px 0}
+.emp .hrs{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:8px 0}
+.emp .hrs label{font-size:12px;color:var(--mute);text-align:center}
+.emp .hrs input{padding:8px 2px;text-align:center;font-size:15px}
+.emp .acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.sm{min-height:42px;border:1px solid var(--line);border-radius:10px;background:var(--soft);padding:6px 12px;font-size:14px}
+code{overflow-wrap:anywhere;font-size:13px}
+/* Onglets */
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--bg);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+.tabs div{display:grid;grid-template-columns:repeat(3,1fr);max-width:560px;margin:0 auto}
+.tab{height:62px;border:0;background:none;font-size:13px;color:var(--mute);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.tab svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.tab.on{color:var(--brand);font-weight:700}
+.hide{display:none!important}
+/* Fenêtres */
+.modal{position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.45);display:none;align-items:flex-end;justify-content:center;padding:12px}
+.modal.on{display:flex}
+.box{background:var(--bg);border-radius:18px;padding:18px;width:100%;max-width:520px;max-height:88vh;overflow:auto;margin-bottom:env(safe-area-inset-bottom)}
+.toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:24px;font-weight:700;opacity:0;transition:.25s;z-index:30;pointer-events:none;white-space:nowrap}
+.toast.on{opacity:1;transform:translateX(-50%)}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}}
+@media (min-width:700px){.modal{align-items:center}}
+</style>
+</head>
+<body>
+<div class="top"><div class="band"></div><div class="band"></div>
+<div class="hd"><img src="data:image/png;base64,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" alt="Sinthylène"><div class="t">Mes heures<span class="n" id="hdName"></span></div></div></div>
+
+<main>
+<!-- Accueil / première configuration -->
+<section class="view" id="v-accueil">
+  <h1>Bienvenue</h1>
+  <p>Cette appli remplace la feuille d'heures papier : vous notez vos heures chaque jour sur votre téléphone, et vous envoyez la feuille du mois en fin de mois.</p>
+  <div class="card">
+    <h3>J'ai reçu un lien de mon responsable</h3>
+    <p class="mute">Ouvrez le lien reçu par SMS ou email. Si vous avez déjà installé l'appli sur l'écran d'accueil, copiez le lien et collez-le ici :</p>
+    <input id="cfgPaste" type="text" placeholder="Collez le lien ici" autocomplete="off">
+    <button class="primary" id="cfgApply">Valider le lien</button>
+  </div>
+  <div class="card">
+    <h3>Configurer moi-même</h3>
+    <label class="f" for="mNom">Prénom</label><input id="mNom" type="text" autocomplete="given-name">
+    <label class="f">Mon horaire prévu par jour (ex. 8h45, 0 si non travaillé)</label>
+    <div class="emp" style="border:0;padding:0;margin:0"><div class="hrs" id="mHrs"></div></div>
+    <button class="second" id="mSave">Enregistrer mon profil</button>
+  </div>
+  <button class="lnk" id="demoBtn">Voir une démonstration (exemple : feuille d'octobre de Domingos)</button><br>
+  <button class="lnk" data-go="admin">Espace responsable</button>
+</section>
+
+<!-- Saisie du jour -->
+<section class="view" id="v-saisie">
+  <div class="daynav">
+    <button class="ic" id="dPrev" aria-label="Jour précédent">‹</button>
+    <div class="c"><b id="dName"></b><span id="dSub"></span></div>
+    <button class="ic" id="dNext" aria-label="Jour suivant">›</button>
+  </div>
+  <div class="week" id="week"></div>
+  <div class="card">
+    <div class="prevu" id="prevu"></div>
+    <div class="types" id="types"></div>
+    <div id="hBox">
+      <div class="hval" id="hVal" aria-live="polite"></div>
+      <div class="steps">
+        <button class="st" data-step="-1">−1 h</button><button class="st" data-step="-0.25">−15</button>
+        <button class="st" data-step="0.25">+15</button><button class="st" data-step="1">+1 h</button>
+      </div>
+      <div class="delta" id="delta"></div>
+      <div style="text-align:center"><button class="lnk" id="hReset">Remettre l'horaire prévu</button></div>
+    </div>
+    <label class="f" for="obs">Observation (facultatif)</label>
+    <textarea id="obs" rows="2" placeholder="Ex. : arrivé à 6h30, commande urgente…"></textarea>
+    <button class="primary" id="saveBtn"></button>
+    <div class="saved" id="savedInfo"></div>
+    <div style="text-align:center"><button class="lnk hide" id="delBtn">Effacer cette journée</button></div>
+  </div>
+</section>
+
+<!-- Mois -->
+<section class="view" id="v-mois">
+  <div class="mnav">
+    <button class="ic" id="mPrev" aria-label="Mois précédent">‹</button>
+    <div class="c"><h1 id="mTitle"></h1><span class="mute" id="mSub"></span></div>
+    <button class="ic" id="mNext" aria-label="Mois suivant">›</button>
+  </div>
+  <div class="kpis" id="kpis"></div>
+  <div id="weeks"></div>
+  <button class="primary" id="sendBtn"></button>
+  <div class="state" id="sendState"></div>
+</section>
+
+<!-- Réglages -->
+<section class="view" id="v-reglages">
+  <h1>Réglages</h1>
+  <h2>Mon profil</h2>
+  <label class="f" for="rNom">Prénom</label><input id="rNom" type="text">
+  <label class="f" for="rMail">Adresse où envoyer la feuille du mois</label><input id="rMail" type="email" placeholder="ex. paie@sinthylene.fr" inputmode="email">
+  <label class="f">Horaire prévu (défini par votre responsable)</label>
+  <div class="scroll" id="rHor"></div>
+  <h2>Installer l'appli</h2>
+  <button class="second hide" id="instBtn">Installer sur ce téléphone</button>
+  <p class="mute"><b>iPhone</b> : dans Safari, bouton Partager → « Sur l'écran d'accueil ».<br><b>Android</b> : dans Chrome, menu ⋮ → « Installer l'application » ou « Ajouter à l'écran d'accueil ».</p>
+  <h2>Sauvegarde</h2>
+  <p class="mute" id="rStore"></p>
+  <button class="second" id="bkCopy">Copier une sauvegarde complète</button>
+  <button class="second" id="bkFile">Télécharger une sauvegarde</button>
+  <label class="second" for="bkIn" style="cursor:pointer">Restaurer une sauvegarde</label>
+  <input type="file" id="bkIn" accept=".json,application/json,text/plain" class="hide">
+  <h2>Autres</h2>
+  <button class="lnk" data-go="admin">Espace responsable</button><br>
+  <button class="lnk" id="resetAll">Réinitialiser l'appli sur ce téléphone</button>
+</section>
+
+<!-- Espace responsable -->
+<section class="view" id="v-admin">
+  <h1>Espace responsable</h1>
+  <p>Définissez l'horaire prévu de chaque salarié, puis envoyez-lui son lien : en l'ouvrant, son téléphone est configuré. Quand un horaire change (contrainte de production, avenant), renvoyez un lien avec une nouvelle date d'effet : les heures déjà saisies sont conservées.</p>
+  <label class="f" for="aMail">Adresse de réception des feuilles</label><input id="aMail" type="email" placeholder="ex. dominique@sinthylene.fr">
+  <label class="f" for="aDu">Date d'effet des horaires</label><input id="aDu" type="date">
+  <div id="emps"></div>
+  <button class="second" id="addEmp">+ Ajouter un salarié</button>
+  <h2>Regrouper les feuilles reçues</h2>
+  <p class="mute">Sélectionnez les fichiers CSV reçus par email (ou collez le contenu des emails ci-dessous) : l'appli fait les totaux par salarié et par semaine, prêts à coller dans votre fichier de suivi.</p>
+  <label class="second" for="cIn" style="cursor:pointer">Choisir les fichiers reçus</label>
+  <input type="file" id="cIn" accept=".csv,.txt,text/csv,text/plain" multiple class="hide">
+  <label class="f" for="cTxt">… ou coller le texte des emails</label>
+  <textarea id="cTxt" rows="3"></textarea>
+  <button class="second" id="cRun">Analyser</button>
+  <div id="cOut"></div>
+  <p style="margin-top:20px"><button class="lnk" id="aBack">← Retour à mes heures</button></p>
+</section>
+</main>
+
+<nav class="tabs" id="tabs"><div>
+  <button class="tab" data-go="saisie"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Saisie</button>
+  <button class="tab" data-go="mois"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Mon mois</button>
+  <button class="tab" data-go="reglages"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4.5-6 8-6s7 2 8 6"/></svg>Réglages</button>
+</div></nav>
+
+<div class="modal" id="modal" role="dialog" aria-modal="true"><div class="box"><h3 id="mdT"></h3><div id="mdB"></div><div id="mdA"></div></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+{
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+const KEY = 'sinthy-heures-v1', AKEY = 'sinthy-heures-admin';
+const TYPES = {trav:'Travaillé', cp:'Congé payé', mal:'Maladie', abs:'Absence non payée', fer:'Férié', aut:'Autre'};
+const JOURS = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche'];
+const JC = ['lun','mar','mer','jeu','ven','sam','dim'];
+const MOIS = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ---------- Stockage local (sur le téléphone uniquement) ---------- */
+const mem = {};
+function load(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : (mem[k] ?? d); } catch (e) { return mem[k] ?? d; } }
+function store(k, v) { mem[k] = v; try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+let S = load(KEY, null) || {profil:null, jours:{}, envois:{}};
+const saveS = () => store(KEY, S);
+let persisted = false;
+async function askPersist() { try { if (navigator.storage && navigator.storage.persist) persisted = await navigator.storage.persist(); } catch (e) {} }
+
+/* ---------- Dates ---------- */
+const pad = n => String(n).padStart(2, '0');
+const key = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+const dow = d => (d.getDay() + 6) % 7;
+const monday = d => addDays(d, -dow(d));
+const today = () => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()); };
+const fr = d => pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear();
+const frc = d => pad(d.getDate()) + '/' + pad(d.getMonth() + 1);
+const longD = d => JOURS[dow(d)] + ' ' + d.getDate() + ' ' + MOIS[d.getMonth()];
+function isoWeek(d) { const t = addDays(d, 3 - dow(d)); return 1 + Math.floor(Math.round((t - new Date(t.getFullYear(), 0, 1)) / 864e5) / 7); }
+// Mois de paie = semaines complètes (lundi → dimanche) dont le dimanche tombe dans le mois.
+// La semaine à cheval sur la fin du mois part sur la paie suivante.
+function periode(y, m) {
+  const f = new Date(y, m, 1), sun = addDays(f, 6 - dow(f));
+  const l = new Date(y, m + 1, 0), lsun = addDays(l, -((dow(l) + 1) % 7));
+  return {start: addDays(sun, -6), end: lsun};
+}
+function moisDe(d) { const s = addDays(monday(d), 6); return {y: s.getFullYear(), m: s.getMonth()}; }
+
+/* ---------- Heures ---------- */
+function fmt(x, sign) { const neg = x < 0; const t = Math.round(Math.abs(x) * 60); const s = Math.floor(t / 60) + 'h' + pad(t % 60); return neg && t ? '−' + s : (sign && t ? '+' + s : s); }
+function parseH(s) { s = String(s ?? '').trim().toLowerCase().replace(',', '.'); if (!s) return 0; const m = s.match(/^(\d{1,2})\s*[h:]\s*(\d{0,2})$/); if (m) return +m[1] + (m[2] ? +m[2] : 0) / 60; const v = parseFloat(s); return isNaN(v) ? null : v; }
+function prevu(d) {
+  const p = S.profil; if (!p || !p.horaires || !p.horaires.length) return 0;
+  const k = key(d), hs = p.horaires.slice().sort((a, b) => a.du < b.du ? -1 : 1);
+  let h = hs[0]; for (const x of hs) if (x.du <= k) h = x;
+  return +h.j[dow(d)] || 0;
+}
+function calc(d) {
+  const e = S.jours[key(d)], p = prevu(d);
+  let h = 0, plus = 0, moins = 0;
+  if (e && e.t === 'trav') { h = e.h; plus = Math.max(0, h - p); moins = Math.max(0, p - h); }
+  else if (e && e.t === 'abs') moins = p;
+  return {d, p, e: e || null, h, plus, moins};
+}
+function dayText(c) {
+  if (!c.e) return '';
+  if (c.e.t === 'trav') return fmt(c.h);
+  return TYPES[c.e.t];
+}
+
+/* ---------- Interface générale ---------- */
+const st = {view: 'saisie', cur: today(), mois: moisDe(today()), draft: null};
+function toast(t) { const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('on'), 1800); }
+function ask(title, html, btns) {
+  $('#mdT').textContent = title; $('#mdB').innerHTML = html; const a = $('#mdA'); a.innerHTML = '';
+  (btns || [{label: 'Fermer'}]).forEach(b => {
+    const el = document.createElement(b.href ? 'a' : 'button');
+    el.className = b.cls || 'second'; el.textContent = b.label;
+    if (b.href) { el.href = b.href; if (b.download) el.download = b.download; }
+    el.addEventListener('click', ev => { if (b.fn) b.fn(ev); if (!b.keep) closeModal(); });
+    a.appendChild(el);
+  });
+  $('#modal').classList.add('on');
+}
+function closeModal() { $('#modal').classList.remove('on'); }
+$('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
+
+function go(v) {
+  if (v !== 'admin' && v !== 'accueil' && !S.profil) v = 'accueil';
+  st.view = v;
+  $$('.view').forEach(s => s.classList.toggle('on', s.id === 'v-' + v));
+  $$('.tab').forEach(t => t.classList.toggle('on', t.dataset.go === v));
+  $('#tabs').classList.toggle('hide', !S.profil || v === 'admin');
+  $('#hdName').textContent = S.profil ? S.profil.nom : '';
+  ({saisie: renderSaisie, mois: renderMois, reglages: renderReglages, admin: renderAdmin, accueil: renderAccueil})[v]();
+  window.scrollTo(0, 0);
+}
+document.addEventListener('click', e => { const g = e.target.closest('[data-go]'); if (g) go(g.dataset.go); });
+
+/* ---------- Saisie ---------- */
+function setDay(d) {
+  st.cur = d; const c = calc(d);
+  st.draft = c.e ? {t: c.e.t, h: c.e.t === 'trav' ? c.e.h : c.p, c: c.e.c || ''} : {t: 'trav', h: c.p, c: ''};
+  renderSaisie();
+}
+$('#types').innerHTML = Object.entries(TYPES).map(([k, v]) => `<button class="ty" data-t="${k}">${v}</button>`).join('');
+$('#types').addEventListener('click', e => { const b = e.target.closest('[data-t]'); if (!b) return; st.draft.t = b.dataset.t; renderSaisie(); });
+$$('[data-step]').forEach(b => b.addEventListener('click', () => { st.draft.h = Math.max(0, Math.min(16, Math.round((st.draft.h + +b.dataset.step) * 4) / 4)); renderSaisie(); }));
+$('#hReset').addEventListener('click', () => { st.draft.h = prevu(st.cur); renderSaisie(); });
+$('#obs').addEventListener('input', e => { st.draft.c = e.target.value; });
+$('#dPrev').addEventListener('click', () => setDay(addDays(st.cur, -1)));
+$('#dNext').addEventListener('click', () => setDay(addDays(st.cur, 1)));
+$('#week').addEventListener('click', e => { const b = e.target.closest('[data-k]'); if (b) { const [y, m, d] = b.dataset.k.split('-').map(Number); setDay(new Date(y, m - 1, d)); } });
+$('#saveBtn').addEventListener('click', () => {
+  const k = key(st.cur), dr = st.draft;
+  S.jours[k] = {t: dr.t, c: (dr.c || '').trim(), m: Date.now()};
+  if (dr.t === 'trav') S.jours[k].h = dr.h;
+  saveS(); askPersist(); toast('Journée enregistrée ✓'); renderSaisie();
+});
+$('#delBtn').addEventListener('click', () => ask('Effacer cette journée ?', `<p>La saisie du ${esc(longD(st.cur))} sera supprimée.</p>`, [
+  {label: 'Effacer', cls: 'primary', fn: () => { delete S.jours[key(st.cur)]; saveS(); setDay(st.cur); toast('Saisie effacée'); }}, {label: 'Annuler'}]));
+
+function renderSaisie() {
+  if (!st.draft) { setDay(st.cur); return; }
+  const d = st.cur, c = calc(d), dr = st.draft, t0 = today();
+  const diff = Math.round((d - t0) / 864e5);
+  $('#dName').textContent = diff === 0 ? "Aujourd'hui" : diff === -1 ? 'Hier' : diff === 1 ? 'Demain' : JOURS[dow(d)];
+  $('#dSub').textContent = longD(d) + ' · sem. ' + isoWeek(d);
+  const mon = monday(d);
+  $('#week').innerHTML = [0,1,2,3,4,5,6].map(i => {
+    const x = addDays(mon, i), cx = calc(x);
+    let cls = cx.e ? (cx.e.t === 'trav' ? 'ok' : 'abs') : (cx.p > 0 ? (x <= t0 ? 'miss' : '') : 'off');
+    if (+x === +d) cls += ' sel'; if (+x === +t0) cls += ' today';
+    const lab = cx.e ? (cx.e.t === 'trav' ? 'saisi ' + fmt(cx.h) : TYPES[cx.e.t]) : (cls.includes('miss') ? 'à saisir' : '');
+    return `<button class="wd ${cls}" data-k="${key(x)}" aria-label="${JOURS[i]} ${x.getDate()} ${lab}">${JC[i]}<b>${x.getDate()}</b><i></i></button>`;
+  }).join('');
+  $('#prevu').innerHTML = c.p > 0 ? `Horaire prévu ce jour : <b>${fmt(c.p)}</b>` : `Jour normalement non travaillé <b>(prévu 0h)</b>`;
+  $$('.ty').forEach(b => b.classList.toggle('sel', b.dataset.t === dr.t));
+  const trav = dr.t === 'trav';
+  $('#hBox').classList.toggle('hide', !trav);
+  $('#hVal').textContent = fmt(dr.h);
+  const ec = dr.h - c.p;
+  $('#delta').innerHTML = !trav ? '' : Math.abs(ec) < 1e-6 ? 'Journée normale' : ec > 0 ? `Heures en plus : <b>${fmt(ec, 1)}</b>` : `Heures en moins : <b>${fmt(ec)}</b>`;
+  $('#hReset').classList.toggle('hide', Math.abs(ec) < 1e-6);
+  $('#obs').value = dr.c || '';
+  const btn = $('#saveBtn');
+  btn.disabled = false; btn.classList.remove('done');
+  if (trav && dr.h === 0 && c.p === 0 && !c.e) { btn.textContent = 'Rien à saisir (jour non travaillé)'; btn.disabled = true; }
+  else if (trav && Math.abs(ec) < 1e-6) btn.textContent = `Valider ma journée · ${fmt(dr.h)}`;
+  else if (trav) btn.textContent = `Enregistrer ${fmt(dr.h)} (${fmt(ec, 1)})`;
+  else btn.textContent = `Enregistrer : ${TYPES[dr.t]}`;
+  if (c.e) {
+    const same = c.e.t === dr.t && (dr.t !== 'trav' || c.e.h === dr.h) && (c.e.c || '') === (dr.c || '').trim();
+    if (same) { btn.textContent = '✓ Enregistré · ' + dayText(c); btn.classList.add('done'); }
+    const m = new Date(c.e.m);
+    $('#savedInfo').textContent = 'Saisi le ' + frc(m) + ' à ' + pad(m.getHours()) + 'h' + pad(m.getMinutes());
+  } else $('#savedInfo').textContent = c.p > 0 && d <= t0 ? 'Pas encore saisi' : '';
+  $('#delBtn').classList.toggle('hide', !c.e);
+}
+
+/* ---------- Mois ---------- */
+function semaines(y, m) {
+  const P = periode(y, m), W = [];
+  for (let s = P.start; s <= P.end; s = addDays(s, 7)) {
+    const jours = [0,1,2,3,4,5,6].map(i => calc(addDays(s, i)));
+    const T = jours.reduce((a, c) => a + c.h, 0), Pv = jours.reduce((a, c) => a + c.p, 0);
+    W.push({start: s, end: addDays(s, 6), n: isoWeek(s), jours, T, Pv,
+      plus: jours.reduce((a, c) => a + c.plus, 0), moins: jours.reduce((a, c) => a + c.moins, 0),
+      t1: Math.min(Math.max(T - 35, 0), 4), t2: Math.max(T - 39, 0)});
+  }
+  return W;
+}
+function manquants(W) { const t0 = today(); return W.flatMap(w => w.jours.filter(c => !c.e && c.p > 0 && c.d <= t0)); }
+$('#mPrev').addEventListener('click', () => { let {y, m} = st.mois; m--; if (m < 0) { m = 11; y--; } st.mois = {y, m}; renderMois(); });
+$('#mNext').addEventListener('click', () => { let {y, m} = st.mois; m++; if (m > 11) { m = 0; y++; } st.mois = {y, m}; renderMois(); });
+$('#weeks').addEventListener('click', e => { const b = e.target.closest('[data-k]'); if (!b) return; const [y, m, d] = b.dataset.k.split('-').map(Number); go('saisie'); setDay(new Date(y, m - 1, d)); });
+
+function renderMois() {
+  const {y, m} = st.mois, P = periode(y, m), W = semaines(y, m), miss = manquants(W), t0 = today();
+  $('#mTitle').textContent = MOIS[m] + ' ' + y;
+  $('#mSub').textContent = `Période de paie : du ${frc(P.start)} au ${frc(P.end)}`;
+  const T = W.reduce((a, w) => a + w.T, 0), plus = W.reduce((a, w) => a + w.plus, 0), moins = W.reduce((a, w) => a + w.moins, 0);
+  $('#kpis').innerHTML = `<div class="kpi"><b>${fmt(T)}</b><span>travaillées</span></div><div class="kpi"><b>${fmt(plus, 1)}</b><span>heures en plus</span></div><div class="kpi"><b>${moins ? fmt(-moins) : '0h00'}</b><span>heures en moins</span></div><div class="kpi ${miss.length ? 'alert' : ''}"><b>${miss.length}</b><span>jour${miss.length > 1 ? 's' : ''} à saisir</span></div>`;
+  $('#weeks').innerHTML = W.map(w => {
+    const rows = w.jours.filter(c => c.e || c.p > 0).map(c => {
+      const ms = !c.e && c.d <= t0, out = c.d.getMonth() !== m;
+      let s = ms ? 'À saisir' : c.e ? esc(dayText(c)) : '<small>à venir</small>';
+      if (c.e && c.e.c) s += ` <small>· ${esc(c.e.c)}</small>`;
+      const x = c.plus ? fmt(c.plus, 1) : c.moins ? fmt(-c.moins) : '';
+      return `<button class="row ${ms ? 'miss' : ''} ${out ? 'out' : ''}" data-k="${key(c.d)}"><span class="d">${JC[dow(c.d)]} ${c.d.getDate()}</span><span class="s">${s}</span><span class="x">${x}</span></button>`;
+    }).join('');
+    const tr = w.T > 35 ? `<br>Au-delà de 35 h : <b>${fmt(w.t1)}</b> (35→39 h)${w.t2 ? ` + <b>${fmt(w.t2)}</b> (au-delà de 39 h)` : ''}` : '';
+    return `<div class="wk"><h3>Semaine ${w.n}<span>${frc(w.start)} → ${frc(w.end)}</span></h3>${rows || '<div class="row"><span class="d">—</span><span class="s"><small>Aucun jour prévu</small></span></div>'}
+      <div class="tot">Travaillé <b>${fmt(w.T)}</b> · prévu ${fmt(w.Pv)} · écart <b>${fmt(w.T - w.Pv, 1)}</b>${tr}</div></div>`;
+  }).join('');
+  $('#sendBtn').textContent = `Envoyer ma feuille de ${MOIS[m]}`;
+  const ym = y + '-' + pad(m + 1), env = S.envois[ym];
+  let txt = 'Pas encore envoyée.';
+  if (env) {
+    const e = new Date(env); txt = `Envoyée le ${frc(e)} à ${pad(e.getHours())}h${pad(e.getMinutes())}.`;
+    const modif = W.some(w => w.jours.some(c => c.e && c.e.m > env));
+    if (modif) txt += ' Des journées ont été modifiées depuis : pensez à la renvoyer.';
+  }
+  $('#sendState').textContent = txt;
+}
+
+/* ---------- Export et envoi ---------- */
+const slug = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const num = x => String(Math.round(x * 100) / 100).replace('.', ',');
+const q = s => /[;"\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+const ENTETE = ['Salarié','Mois de paie','Semaine','Date','Jour','Type','Prévu','Travaillé','H+','H−','Observation'];
+function lignesCSV(y, m) {
+  const ym = y + '-' + pad(m + 1), nom = S.profil.nom;
+  return semaines(y, m).flatMap(w => w.jours.filter(c => c.e || c.p > 0).map(c =>
+    [nom, ym, w.n, fr(c.d), JOURS[dow(c.d)], c.e ? TYPES[c.e.t] : 'Non saisi', num(c.p), num(c.h), num(c.plus), num(c.moins), (c.e && c.e.c) || '']
+      .map(v => q(String(v))).join(';')));
+}
+const csv = (y, m) => '﻿' + [ENTETE.join(';'), ...lignesCSV(y, m)].join('\r\n') + '\r\n';
+function recap(y, m, detail) {
+  const P = periode(y, m), W = semaines(y, m), miss = manquants(W), L = [];
+  L.push(`Feuille d'heures — ${S.profil.nom} — ${MOIS[m]} ${y}`, `Période de paie : du ${fr(P.start)} au ${fr(P.end)}`, '');
+  W.forEach(w => {
+    L.push(`Semaine ${w.n} (${frc(w.start)} → ${frc(w.end)}) : ${fmt(w.T)} travaillées, ${fmt(w.Pv)} prévues, écart ${fmt(w.T - w.Pv, 1)}` + (w.T > 35 ? ` [35→39 h : ${fmt(w.t1)}${w.t2 ? ` ; >39 h : ${fmt(w.t2)}` : ''}]` : ''));
+    if (detail) w.jours.filter(c => c.e).forEach(c => L.push(`   ${JC[dow(c.d)]} ${frc(c.d)} : ${dayText(c)}${c.plus ? ' (+' + fmt(c.plus) + ')' : ''}${c.moins ? ' (−' + fmt(c.moins) + ')' : ''}${c.e.c ? ' — ' + c.e.c : ''}`));
+  });
+  const T = W.reduce((a, w) => a + w.T, 0), plus = W.reduce((a, w) => a + w.plus, 0), moins = W.reduce((a, w) => a + w.moins, 0);
+  L.push('', `Total : ${fmt(T)} travaillées · heures en plus ${fmt(plus)} · heures en moins ${fmt(moins)}`);
+  const abs = {}; W.forEach(w => w.jours.forEach(c => { if (c.e && c.e.t !== 'trav') abs[TYPES[c.e.t]] = (abs[TYPES[c.e.t]] || 0) + 1; }));
+  if (Object.keys(abs).length) L.push('Absences : ' + Object.entries(abs).map(([k, v]) => `${k} ${v} j`).join(', '));
+  L.push(miss.length ? 'Jours non saisis : ' + miss.map(c => JC[dow(c.d)] + ' ' + frc(c.d)).join(', ') : 'Tous les jours prévus sont saisis.');
+  return L.join('\n');
+}
+function marquer(y, m) { S.envois[y + '-' + pad(m + 1)] = Date.now(); saveS(); renderMois(); }
+
+$('#sendBtn').addEventListener('click', () => {
+  const {y, m} = st.mois, miss = manquants(semaines(y, m));
+  if (miss.length) ask(`${miss.length} jour${miss.length > 1 ? 's' : ''} non saisi${miss.length > 1 ? 's' : ''}`,
+    `<p>${miss.map(c => esc(JC[dow(c.d)] + ' ' + frc(c.d))).join(', ')}</p><p class="mute">Vous pouvez les compléter avant d'envoyer, ou envoyer quand même : ils apparaîtront « Non saisi ».</p>`,
+    [{label: 'Compléter d\'abord', cls: 'primary', fn: () => { go('saisie'); setDay(miss[0].d); }}, {label: 'Envoyer quand même', fn: () => setTimeout(() => envoyer(y, m), 50)}]);
+  else envoyer(y, m);
+});
+async function envoyer(y, m) {
+  const nom = S.profil.nom, sujet = `Heures ${MOIS[m]} ${y} — ${nom}`, nomF = `Heures_${y}-${pad(m + 1)}_${slug(nom)}.csv`;
+  const contenu = csv(y, m);
+  let file = null; try { file = new File([contenu], nomF, {type: 'text/csv'}); } catch (e) {}
+  try {
+    if (file && navigator.canShare && navigator.canShare({files: [file]})) {
+      await navigator.share({files: [file], title: sujet, text: recap(y, m, false)});
+      marquer(y, m); toast('Feuille transmise ✓'); return;
+    }
+  } catch (e) { if (e && e.name === 'AbortError') return; }
+  // Repli : email pré-rempli (texte + données) et fichier à joindre soi-même.
+  const dest = S.profil.email || '';
+  const corps = recap(y, m, true) + '\n\n#DONNEES (ne pas modifier)\n' + [ENTETE.join(';'), ...lignesCSV(y, m)].join('\n');
+  const mailto = `mailto:${encodeURIComponent(dest)}?subject=${encodeURIComponent(sujet)}&body=${encodeURIComponent(corps)}`;
+  let url = ''; try { url = URL.createObjectURL(new Blob([contenu], {type: 'text/csv'})); } catch (e) {}
+  ask('Envoyer la feuille', `<p>${dest ? 'Destinataire : <b>' + esc(dest) + '</b>' : 'Aucune adresse enregistrée : indiquez-la dans Réglages, ou choisissez-la dans votre messagerie.'}</p><p class="mute">L'email s'ouvre avec le récapitulatif et les données du mois déjà écrits : il suffit d'appuyer sur Envoyer.</p>`, [
+    {label: 'Ouvrir l\'email prêt à envoyer', cls: 'primary', href: mailto, fn: () => marquer(y, m)},
+    ...(url ? [{label: 'Télécharger le fichier (pièce jointe)', href: url, download: nomF}] : []),
+    {label: 'Copier le récapitulatif', fn: async () => { try { await navigator.clipboard.writeText(corps); toast('Copié'); marquer(y, m); } catch (e) { toast('Copie impossible'); } }},
+    {label: 'Annuler'}]);
+}
+
+/* ---------- Réglages ---------- */
+$('#rNom').addEventListener('change', e => { const v = e.target.value.trim(); if (v) { S.profil.nom = v; saveS(); $('#hdName').textContent = v; } });
+$('#rMail').addEventListener('change', e => { S.profil.email = e.target.value.trim(); saveS(); toast('Adresse enregistrée'); });
+function tableHoraires(hs) {
+  return `<table class="hor"><thead><tr><th>Depuis</th>${JC.map(j => `<th class="n">${j}</th>`).join('')}<th class="n">Total</th></tr></thead><tbody>${hs.slice().sort((a, b) => a.du < b.du ? 1 : -1).map(h =>
+    `<tr><td>${h.du <= '2000-01-01' ? 'Toujours' : esc(h.du.split('-').reverse().join('/'))}</td>${h.j.map(v => `<td class="n">${v ? fmt(v) : '—'}</td>`).join('')}<td class="n"><b>${fmt(h.j.reduce((a, b) => a + (+b || 0), 0))}</b></td></tr>`).join('')}</tbody></table>`;
+}
+async function renderReglages() {
+  $('#rNom').value = S.profil.nom; $('#rMail').value = S.profil.email || '';
+  $('#rHor').innerHTML = tableHoraires(S.profil.horaires);
+  const n = Object.keys(S.jours).length;
+  let p = persisted; try { if (navigator.storage && navigator.storage.persisted) p = await navigator.storage.persisted(); } catch (e) {}
+  $('#rStore').textContent = `${n} journée${n > 1 ? 's' : ''} enregistrée${n > 1 ? 's' : ''} sur ce téléphone${p ? ' (stockage protégé)' : ''}. Les heures ne sont stockées que sur ce téléphone : la feuille envoyée chaque mois sert aussi de copie.`;
+  $('#instBtn').classList.toggle('hide', !deferredInstall);
+}
+const backup = () => JSON.stringify({app: 'mes-heures-sinthylene', v: 1, date: new Date().toISOString(), data: S});
+$('#bkCopy').addEventListener('click', async () => { try { await navigator.clipboard.writeText(backup()); toast('Sauvegarde copiée'); } catch (e) { toast('Copie impossible'); } });
+$('#bkFile').addEventListener('click', () => {
+  try { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([backup()], {type: 'application/json'})); a.download = `sauvegarde-heures-${slug(S.profil.nom)}-${key(today())}.json`; document.body.appendChild(a); a.click(); a.remove(); }
+  catch (e) { toast('Téléchargement impossible ici'); }
+});
+$('#bkIn').addEventListener('change', async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const o = JSON.parse(await f.text()); const d = o.data || o; if (!d.jours) throw 0;
+    let n = 0; for (const [k, v] of Object.entries(d.jours)) { if (!S.jours[k] || (v.m || 0) > (S.jours[k].m || 0)) { S.jours[k] = v; n++; } }
+    if (!S.profil && d.profil) S.profil = d.profil;
+    Object.assign(S.envois, d.envois || {}); saveS(); toast(n + ' journée(s) restaurée(s)'); go('reglages');
+  } catch (err) { toast('Fichier de sauvegarde non reconnu'); }
+  e.target.value = '';
+});
+$('#resetAll').addEventListener('click', () => ask('Réinitialiser l\'appli ?', '<p>Le profil et <b>toutes les heures saisies sur ce téléphone</b> seront effacés. Faites d\'abord une sauvegarde ou envoyez vos feuilles.</p>', [
+  {label: 'Tout effacer', cls: 'primary', fn: () => { S = {profil: null, jours: {}, envois: {}}; saveS(); st.draft = null; go('accueil'); }}, {label: 'Annuler'}]));
+let deferredInstall = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; if (st.view === 'reglages') renderReglages(); });
+$('#instBtn').addEventListener('click', async () => { if (!deferredInstall) return; deferredInstall.prompt(); try { await deferredInstall.userChoice; } catch (e) {} deferredInstall = null; renderReglages(); });
+
+/* ---------- Configuration par lien ---------- */
+const b64e = s => btoa(unescape(encodeURIComponent(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const b64d = s => decodeURIComponent(escape(atob(s.replace(/-/g, '+').replace(/_/g, '/'))));
+function lireCfg(txt) { const m = String(txt).match(/cfg=([A-Za-z0-9_-]+)/); if (!m) return null; try { const c = JSON.parse(b64d(m[1])); return c && c.nom && Array.isArray(c.j) ? c : null; } catch (e) { return null; } }
+function appliquerCfg(c) {
+  const faire = () => {
+    const first = !S.profil;
+    if (!S.profil || S.profil.nom !== c.nom) S.profil = {nom: c.nom, email: c.email || '', horaires: []};
+    if (c.email) S.profil.email = c.email;
+    const du = first || !S.profil.horaires.length ? '2000-01-01' : (c.du || key(today()));
+    const j = c.j.map(v => +v || 0);
+    S.profil.horaires = S.profil.horaires.filter(h => h.du !== du); S.profil.horaires.push({du, j});
+    saveS(); st.draft = null; go('saisie');
+    toast(first ? 'Appli configurée ✓' : 'Horaire mis à jour ✓');
+  };
+  if (S.profil && S.profil.nom !== c.nom) ask('Changer de salarié ?', `<p>Ce téléphone est configuré pour <b>${esc(S.profil.nom)}</b>. Le lien concerne <b>${esc(c.nom)}</b>.</p>`, [{label: 'Utiliser ' + c.nom, cls: 'primary', fn: faire}, {label: 'Annuler'}]);
+  else faire();
+}
+$('#cfgApply').addEventListener('click', () => { const c = lireCfg($('#cfgPaste').value); if (c) appliquerCfg(c); else toast('Lien non reconnu'); });
+
+/* ---------- Accueil ---------- */
+const hrsInputs = (id, vals) => JC.map((j, i) => `<label for="${id}${i}">${j}<input id="${id}${i}" data-i="${i}" inputmode="decimal" value="${vals[i] ? fmt(vals[i]) : '0'}"></label>`).join('');
+function renderAccueil() { if (!$('#mHrs').innerHTML) $('#mHrs').innerHTML = hrsInputs('mh', [8.75, 8.75, 8.75, 8.75, 0, 0, 0]); }
+$('#mSave').addEventListener('click', () => {
+  const nom = $('#mNom').value.trim(); if (!nom) { toast('Indiquez votre prénom'); return; }
+  const j = $$('#mHrs input').map(i => parseH(i.value) || 0);
+  S.profil = {nom, email: '', horaires: [{du: '2000-01-01', j}]}; saveS(); st.draft = null; go('saisie');
+});
+$('#demoBtn').addEventListener('click', () => {
+  // Données réelles de la feuille papier d'octobre 2026 de Domingos (transcription).
+  const h = {'2026-10-01':10,'2026-10-02':5,'2026-10-05':10,'2026-10-06':11,'2026-10-07':11,'2026-10-08':10,'2026-10-09':5,'2026-10-12':10,'2026-10-13':10,'2026-10-14':10,'2026-10-15':10,'2026-10-19':9.75,'2026-10-20':9.75,'2026-10-21':9.75,'2026-10-22':9.75,'2026-10-26':9.75};
+  S = {profil: {nom: 'Domingos (démo)', email: '', horaires: [{du: '2000-01-01', j: [9.75, 9.75, 9.75, 9.75, 0, 0, 0]}]}, jours: {}, envois: {}};
+  const t = new Date(2026, 9, 27, 17, 0).getTime();
+  for (const [k, v] of Object.entries(h)) S.jours[k] = {t: 'trav', h: v, c: '', m: t};
+  S.jours['2026-10-12'].c = 'chiffre peu lisible sur la feuille papier';
+  saveS(); st.mois = {y: 2026, m: 9}; st.draft = null; go('mois');
+});
+
+/* ---------- Espace responsable ---------- */
+let A = load(AKEY, null) || {email: '', emps: [
+  {nom: 'Antonin', j: [8.75, 8.75, 8.75, 8.75, 0, 0, 0]}, {nom: 'Domingos', j: [9.75, 9.75, 9.75, 9.75, 0, 0, 0]},
+  {nom: 'Laure', j: [8.75, 8.75, 8.75, 8.75, 0, 0, 0]}, {nom: 'Laureline', j: [8.75, 8.75, 8.75, 8.75, 0, 0, 0]},
+  {nom: 'Marie-Rose', j: [8.75, 8.75, 8.75, 8.75, 0, 0, 0]}, {nom: 'Martine', j: [8.75, 8.75, 8.75, 8.75, 0, 0, 0]},
+  {nom: 'Sabrina', j: [8, 9, 9, 9, 0, 0, 0]}]};
+const saveA = () => store(AKEY, A);
+const base = () => location.href.split('#')[0];
+const lien = e => base() + '#cfg=' + b64e(JSON.stringify({v: 1, nom: e.nom, email: A.email, du: $('#aDu').value || key(today()), j: e.j}));
+function renderAdmin() {
+  $('#aMail').value = A.email || ''; if (!$('#aDu').value) $('#aDu').value = key(today());
+  $('#emps').innerHTML = A.emps.map((e, i) => `<div class="emp" data-e="${i}">
+    <input class="enom" value="${esc(e.nom)}" aria-label="Prénom" placeholder="Prénom">
+    <div class="hrs">${JC.map((j, k) => `<label>${j}<input data-k="${k}" inputmode="decimal" value="${e.j[k] ? fmt(e.j[k]) : '0'}"></label>`).join('')}</div>
+    <div class="acts"><b style="flex:1" class="tot2">${fmt(e.j.reduce((a, b) => a + b, 0))} / semaine</b>
+      <button class="sm" data-a="copy">Copier le lien</button><a class="sm" data-a="sms" href="sms:">SMS</a><button class="sm" data-a="del" aria-label="Supprimer">✕</button></div></div>`).join('');
+}
+$('#aMail').addEventListener('change', e => { A.email = e.target.value.trim(); saveA(); });
+$('#emps').addEventListener('change', e => {
+  const box = e.target.closest('[data-e]'); if (!box) return; const em = A.emps[+box.dataset.e];
+  if (e.target.classList.contains('enom')) em.nom = e.target.value.trim();
+  else { const v = parseH(e.target.value); if (v == null) { toast('Horaire non reconnu'); return; } em.j[+e.target.dataset.k] = v; e.target.value = v ? fmt(v) : '0'; }
+  box.querySelector('.tot2').textContent = fmt(em.j.reduce((a, b) => a + b, 0)) + ' / semaine';
+  saveA();
+});
+$('#emps').addEventListener('click', async e => {
+  const b = e.target.closest('[data-a]'); if (!b) return; const i = +b.closest('[data-e]').dataset.e, em = A.emps[i];
+  if (b.dataset.a === 'del') { ask('Supprimer ' + em.nom + ' ?', '', [{label: 'Supprimer', cls: 'primary', fn: () => { A.emps.splice(i, 1); saveA(); renderAdmin(); }}, {label: 'Annuler'}]); return; }
+  if (!em.nom) { e.preventDefault(); toast('Indiquez le prénom'); return; }
+  const l = lien(em);
+  if (b.dataset.a === 'sms') { b.href = 'sms:?&body=' + encodeURIComponent(`Bonjour ${em.nom}, voici le lien pour installer l'appli de saisie des heures sur ton téléphone : ${l}`); return; }
+  try { await navigator.clipboard.writeText(l); toast('Lien de ' + em.nom + ' copié'); } catch (err) { ask('Lien de ' + em.nom, `<p><code>${esc(l)}</code></p>`); }
+});
+$('#addEmp').addEventListener('click', () => { A.emps.push({nom: '', j: [8.75, 8.75, 8.75, 8.75, 0, 0, 0]}); saveA(); renderAdmin(); });
+$('#aBack').addEventListener('click', () => { history.replaceState(null, '', base()); go(S.profil ? 'saisie' : 'accueil'); });
+
+/* Regroupement des feuilles reçues */
+function parseCSV(t) {
+  t = t.replace(/^﻿/, ''); const rows = []; let row = [], f = '', qu = false;
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i];
+    if (qu) { if (c === '"') { if (t[i + 1] === '"') { f += '"'; i++; } else qu = false; } else f += c; }
+    else if (c === '"') qu = true; else if (c === ';') { row.push(f); f = ''; }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && t[i + 1] === '\n') i++; row.push(f); rows.push(row); row = []; f = ''; }
+    else f += c;
+  }
+  row.push(f); rows.push(row);
+  return rows.map(r => r.map(x => x.trim())).filter(r => r.length >= 11 && r[0] !== 'Salarié' && /^\d{2}\/\d{2}\/\d{4}$/.test(r[3]));
+}
+let cFiles = [];
+$('#cIn').addEventListener('change', async e => { cFiles = await Promise.all([...e.target.files].map(f => f.text())); toast(cFiles.length + ' fichier(s) chargé(s)'); runConso(); });
+$('#cRun').addEventListener('click', runConso);
+let consoRows = [], consoSum = [];
+function runConso() {
+  const nb = s => parseFloat(String(s).replace(',', '.')) || 0;
+  const map = new Map();
+  [...cFiles, $('#cTxt').value].forEach(t => parseCSV(t || '').forEach(r => map.set(r[0] + '|' + r[3], r)));
+  consoRows = [...map.values()].sort((a, b) => a[0].localeCompare(b[0]) || a[3].split('/').reverse().join().localeCompare(b[3].split('/').reverse().join()));
+  if (!consoRows.length) { $('#cOut').innerHTML = '<p class="mute">Aucune ligne reconnue.</p>'; return; }
+  const P = new Map(), W = new Map();
+  consoRows.forEach(r => {
+    const k = r[0] + '|' + r[1];
+    const p = P.get(k) || {nom: r[0], mois: r[1], j: 0, ns: 0, T: 0, Pv: 0, plus: 0, moins: 0, cp: 0, mal: 0, abs: 0, aut: 0, t1: 0, t2: 0};
+    if (r[5] === 'Non saisi') p.ns++; else p.j++;
+    p.T += nb(r[7]); p.Pv += nb(r[6]); p.plus += nb(r[8]); p.moins += nb(r[9]);
+    if (r[5] === TYPES.cp) p.cp++; if (r[5] === TYPES.mal) p.mal++; if (r[5] === TYPES.abs) p.abs++; if (r[5] === TYPES.fer || r[5] === TYPES.aut) p.aut++;
+    P.set(k, p);
+    const wk = k + '|' + r[2]; W.set(wk, (W.get(wk) || 0) + nb(r[7]));
+  });
+  W.forEach((T, wk) => { const p = P.get(wk.split('|').slice(0, 2).join('|')); p.t1 += Math.min(Math.max(T - 35, 0), 4); p.t2 += Math.max(T - 39, 0); });
+  consoSum = [...P.values()];
+  const cols = [['Salarié', 'nom'], ['Mois', 'mois'], ['Jours saisis', 'j'], ['Non saisis', 'ns'], ['Travaillé', 'T', 1], ['Prévu', 'Pv', 1], ['H+', 'plus', 1], ['H−', 'moins', 1], ['HS 35→39', 't1', 1], ['HS >39', 't2', 1], ['CP (j)', 'cp'], ['Maladie (j)', 'mal'], ['Abs. non payée (j)', 'abs'], ['Férié/autre (j)', 'aut']];
+  $('#cOut').innerHTML = `<p class="mute">${consoRows.length} lignes, ${consoSum.length} feuille(s).</p><div class="scroll"><table><thead><tr>${cols.map(c => `<th class="${c[2] || typeof consoSum[0][c[1]] === 'number' ? 'n' : ''}">${c[0]}</th>`).join('')}</tr></thead><tbody>${consoSum.map(p => `<tr>${cols.map(c => {
+    const v = p[c[1]]; return typeof v === 'number' ? `<td class="n">${c[2] ? fmt(v) : v}</td>` : `<td>${esc(v)}</td>`; }).join('')}</tr>`).join('')}</tbody></table></div>
+    <button class="second" id="cCopyS">Copier la synthèse (pour Excel)</button><button class="second" id="cCopyD">Copier le détail jour par jour (pour Excel)</button>`;
+  const tsv = (head, rows) => [head.join('\t'), ...rows.map(r => r.join('\t'))].join('\n');
+  $('#cCopyS').addEventListener('click', async () => { try { await navigator.clipboard.writeText(tsv(cols.map(c => c[0]), consoSum.map(p => cols.map(c => typeof p[c[1]] === 'number' ? num(p[c[1]]) : p[c[1]])))); toast('Synthèse copiée'); } catch (e) { toast('Copie impossible'); } });
+  $('#cCopyD').addEventListener('click', async () => { try { await navigator.clipboard.writeText(tsv(ENTETE, consoRows.map(r => r.map(x => x.replace(/[\t\n]/g, ' '))))); toast('Détail copié'); } catch (e) { toast('Copie impossible'); } });
+}
+
+/* ---------- Démarrage ---------- */
+function route() {
+  const h = location.hash;
+  if (h.startsWith('#cfg=')) { const c = lireCfg(h); history.replaceState(null, '', base()); if (c) { appliquerCfg(c); return; } toast('Lien non reconnu'); }
+  if (h === '#admin') { go('admin'); return; }
+  go(S.profil ? 'saisie' : 'accueil');
+}
+window.addEventListener('hashchange', route);
+route();
+try { if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {}); } catch (e) {}
+}
+</script>
+</body>
+</html>
