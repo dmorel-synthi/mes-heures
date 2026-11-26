@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#E4032E">
+<meta name="robots" content="noindex, nofollow">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Mes heures">
@@ -53,6 +54,9 @@ p{margin:0 0 12px}
 .wd.ok i{background:var(--ink)}.wd.abs i{background:var(--mute)}
 .wd.miss i{border-color:var(--brand)}.wd.miss{border-color:var(--brand)}
 .wd.off{color:var(--mute)}
+.wd.prov{border-style:dashed}.wd.prov i{border-color:var(--ink);background:none}.wd.prov.miss i{border-color:var(--brand)}
+.note{background:var(--soft);border-left:4px solid var(--ink);padding:8px 12px;border-radius:6px;font-size:14px;margin-bottom:12px}
+.row .pv{color:var(--red);font-weight:700}
 .wd.sel{outline:3px solid var(--ink);outline-offset:-1px}
 .wd.today b{text-decoration:underline;text-underline-offset:3px}
 .prevu{font-size:15px;color:var(--mute);margin-bottom:12px}
@@ -96,6 +100,10 @@ table.hor{font-size:13px}table.hor th,table.hor td{padding:5px 4px}
 .row.miss .s{color:var(--red);font-weight:700}
 .row.out{opacity:.72}
 .tot{border-top:2px solid var(--ink);padding:10px 14px;font-size:14px}
+.sum{border:2px solid var(--ink)}.sum h3{background:var(--ink);color:var(--bg)}.sum h3 span{color:var(--bg);opacity:.75}
+.li{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:9px 14px;border-top:1px solid var(--line)}
+.li b{font-variant-numeric:tabular-nums;white-space:nowrap;font-size:17px}.li.big b{font-size:22px}.li.hs b{color:var(--red)}
+.li small{color:var(--mute);display:block;font-size:13px}
 .tot b{font-variant-numeric:tabular-nums}
 .state{font-size:14px;color:var(--mute);text-align:center;margin-top:8px}
 /* Tableaux réglages / responsable */
@@ -150,7 +158,7 @@ code{overflow-wrap:anywhere;font-size:13px}
     <div class="emp" style="border:0;padding:0;margin:0"><div class="hrs" id="mHrs"></div></div>
     <button class="second" id="mSave">Enregistrer mon profil</button>
   </div>
-  <button class="lnk" id="demoBtn">Voir une démonstration (exemple : feuille d'octobre de Domingos)</button><br>
+  <button class="lnk" id="demoBtn">Voir une démonstration (salarié fictif)</button><br>
   <button class="lnk" data-go="admin">Espace responsable</button>
 </section>
 
@@ -164,6 +172,7 @@ code{overflow-wrap:anywhere;font-size:13px}
   <div class="week" id="week"></div>
   <div class="card">
     <div class="prevu" id="prevu"></div>
+    <div class="note hide" id="pNote"></div>
     <div class="types" id="types"></div>
     <div id="hBox">
       <div class="hval" id="hVal" aria-live="polite"></div>
@@ -191,6 +200,8 @@ code{overflow-wrap:anywhere;font-size:13px}
   </div>
   <div class="kpis" id="kpis"></div>
   <div id="weeks"></div>
+  <div id="monthTot"></div>
+  <div id="regBox"></div>
   <button class="primary" id="sendBtn"></button>
   <div class="state" id="sendState"></div>
 </section>
@@ -261,6 +272,7 @@ const mem = {};
 function load(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : (mem[k] ?? d); } catch (e) { return mem[k] ?? d; } }
 function store(k, v) { mem[k] = v; try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
 let S = load(KEY, null) || {profil:null, jours:{}, envois:{}};
+S.tx = S.tx || {}; S.envois = S.envois || {};
 const saveS = () => store(KEY, S);
 let persisted = false;
 async function askPersist() { try { if (navigator.storage && navigator.storage.persist) persisted = await navigator.storage.persist(); } catch (e) {} }
@@ -276,14 +288,12 @@ const fr = d => pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFull
 const frc = d => pad(d.getDate()) + '/' + pad(d.getMonth() + 1);
 const longD = d => JOURS[dow(d)] + ' ' + d.getDate() + ' ' + MOIS[d.getMonth()];
 function isoWeek(d) { const t = addDays(d, 3 - dow(d)); return 1 + Math.floor(Math.round((t - new Date(t.getFullYear(), 0, 1)) / 864e5) / 7); }
-// Mois de paie = semaines complètes (lundi → dimanche) dont le dimanche tombe dans le mois.
-// La semaine à cheval sur la fin du mois part sur la paie suivante.
-function periode(y, m) {
-  const f = new Date(y, m, 1), sun = addDays(f, 6 - dow(f));
-  const l = new Date(y, m + 1, 0), lsun = addDays(l, -((dow(l) + 1) % 7));
-  return {start: addDays(sun, -6), end: lsun};
-}
-function moisDe(d) { const s = addDays(monday(d), 6); return {y: s.getFullYear(), m: s.getMonth()}; }
+// Mois du salarié = mois calendaire (du 1er au dernier jour).
+// Heures sup = calcul sur la semaine complète (lundi → dimanche), rattachée à la paie du mois de son dimanche :
+// la semaine à cheval sur la fin du mois part sur la paie suivante.
+const periode = (y, m) => ({start: new Date(y, m, 1), end: new Date(y, m + 1, 0)});
+function paieDe(d) { const s = addDays(monday(d), 6); return {y: s.getFullYear(), m: s.getMonth()}; }
+const parseFR = s => { const [d, m, y] = s.split('/').map(Number); return new Date(y, m - 1, d); };
 
 /* ---------- Heures ---------- */
 function fmt(x, sign) { const neg = x < 0; const t = Math.round(Math.abs(x) * 60); const s = Math.floor(t / 60) + 'h' + pad(t % 60); return neg && t ? '−' + s : (sign && t ? '+' + s : s); }
@@ -301,6 +311,19 @@ function calc(d) {
   else if (e && e.t === 'abs') moins = p;
   return {d, p, e: e || null, h, plus, moins};
 }
+// Valeur d'une journée telle qu'elle partirait dans la feuille
+const val = d => { const e = S.jours[key(d)]; return e ? {t: e.t, h: e.t === 'trav' ? e.h : 0} : {t: 'ns', h: 0}; };
+const sameV = (a, b) => a.t === b.t && Math.abs((a.h || 0) - (b.h || 0)) < 1e-6;
+const TLAB = t => t === 'ns' ? 'Non saisi' : TYPES[t];
+const vText = v => v.t === 'trav' ? fmt(v.h) : TLAB(v.t);
+const parseK = k => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); };
+const ymOf = d => d.getFullYear() + '-' + pad(d.getMonth() + 1);
+// S.tx garde ce qui a été transmis pour chaque journée envoyée.
+// Une journée déjà transmise puis modifiée (provisoire corrigé, oubli, erreur) est à régulariser.
+function regs(exclYm) {
+  return Object.entries(S.tx).map(([k, old]) => { const d = parseK(k); return {k, d, old, now: val(d), ym: ymOf(d)}; })
+    .filter(x => x.ym !== exclYm && !sameV(x.old, x.now)).sort((a, b) => a.d - b.d);
+}
 function dayText(c) {
   if (!c.e) return '';
   if (c.e.t === 'trav') return fmt(c.h);
@@ -308,7 +331,7 @@ function dayText(c) {
 }
 
 /* ---------- Interface générale ---------- */
-const st = {view: 'saisie', cur: today(), mois: moisDe(today()), draft: null};
+const st = {view: 'saisie', cur: today(), mois: {y: today().getFullYear(), m: today().getMonth()}, draft: null};
 function toast(t) { const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('on'), 1800); }
 function ask(title, html, btns) {
   $('#mdT').textContent = title; $('#mdB').innerHTML = html; const a = $('#mdA'); a.innerHTML = '';
@@ -351,10 +374,13 @@ $('#dPrev').addEventListener('click', () => setDay(addDays(st.cur, -1)));
 $('#dNext').addEventListener('click', () => setDay(addDays(st.cur, 1)));
 $('#week').addEventListener('click', e => { const b = e.target.closest('[data-k]'); if (b) { const [y, m, d] = b.dataset.k.split('-').map(Number); setDay(new Date(y, m - 1, d)); } });
 $('#saveBtn').addEventListener('click', () => {
-  const k = key(st.cur), dr = st.draft;
-  S.jours[k] = {t: dr.t, c: (dr.c || '').trim(), m: Date.now()};
-  if (dr.t === 'trav') S.jours[k].h = dr.h;
-  saveS(); askPersist(); toast('Journée enregistrée ✓'); renderSaisie();
+  const k = key(st.cur), dr = st.draft, old = S.jours[k], fut = st.cur > today();
+  const e = {t: dr.t, c: (dr.c || '').trim(), m: Date.now()};
+  if (dr.t === 'trav') e.h = dr.h;
+  if (fut) { e.prov = true; e.ant = {t: e.t, h: e.h || 0, m: e.m}; }   // saisie anticipée
+  else if (old && old.ant) e.ant = old.ant;                            // on garde la trace de l'anticipation
+  S.jours[k] = e;
+  saveS(); askPersist(); toast(fut ? 'Enregistré en provisoire' : old && old.prov ? 'Journée confirmée ✓' : 'Journée enregistrée ✓'); renderSaisie();
 });
 $('#delBtn').addEventListener('click', () => ask('Effacer cette journée ?', `<p>La saisie du ${esc(longD(st.cur))} sera supprimée.</p>`, [
   {label: 'Effacer', cls: 'primary', fn: () => { delete S.jours[key(st.cur)]; saveS(); setDay(st.cur); toast('Saisie effacée'); }}, {label: 'Annuler'}]));
@@ -368,12 +394,17 @@ function renderSaisie() {
   const mon = monday(d);
   $('#week').innerHTML = [0,1,2,3,4,5,6].map(i => {
     const x = addDays(mon, i), cx = calc(x);
-    let cls = cx.e ? (cx.e.t === 'trav' ? 'ok' : 'abs') : (cx.p > 0 ? (x <= t0 ? 'miss' : '') : 'off');
+    let cls = cx.e ? (cx.e.prov ? (x <= t0 ? 'prov miss' : 'prov') : cx.e.t === 'trav' ? 'ok' : 'abs') : (cx.p > 0 ? (x <= t0 ? 'miss' : '') : 'off');
     if (+x === +d) cls += ' sel'; if (+x === +t0) cls += ' today';
-    const lab = cx.e ? (cx.e.t === 'trav' ? 'saisi ' + fmt(cx.h) : TYPES[cx.e.t]) : (cls.includes('miss') ? 'à saisir' : '');
+    const lab = cx.e ? (cx.e.t === 'trav' ? 'saisi ' + fmt(cx.h) : TYPES[cx.e.t]) + (cx.e.prov ? (x <= t0 ? ', à confirmer' : ', provisoire') : '') : (cls.includes('miss') ? 'à saisir' : '');
     return `<button class="wd ${cls}" data-k="${key(x)}" aria-label="${JOURS[i]} ${x.getDate()} ${lab}">${JC[i]}<b>${x.getDate()}</b><i></i></button>`;
   }).join('');
   $('#prevu').innerHTML = c.p > 0 ? `Horaire prévu ce jour : <b>${fmt(c.p)}</b>` : `Jour normalement non travaillé <b>(prévu 0h)</b>`;
+  const notes = [], tx = S.tx[key(d)];
+  if (c.e && c.e.prov) notes.push(d > t0 ? 'Saisie <b>provisoire</b> (faite en avance) : vous la confirmerez le jour venu.' : `Saisie faite en avance${c.e.ant ? ' le ' + frc(new Date(c.e.ant.m)) : ''} : <b>à confirmer</b> ou à corriger.`);
+  else if (c.e && c.e.ant && !sameV(c.e.ant, val(d))) notes.push(`Saisi en avance : ${esc(vText(c.e.ant))}, corrigé en ${esc(vText(val(d)))}.`);
+  if (tx && !sameV(tx, val(d))) notes.push(`La feuille de ${MOIS[d.getMonth()]} est partie avec ${esc(vText(tx))} : l'écart sera envoyé en <b>régularisation</b> avec la prochaine feuille.`);
+  $('#pNote').innerHTML = notes.join('<br>'); $('#pNote').classList.toggle('hide', !notes.length);
   $$('.ty').forEach(b => b.classList.toggle('sel', b.dataset.t === dr.t));
   const trav = dr.t === 'trav';
   $('#hBox').classList.toggle('hide', !trav);
@@ -388,57 +419,90 @@ function renderSaisie() {
   else if (trav && Math.abs(ec) < 1e-6) btn.textContent = `Valider ma journée · ${fmt(dr.h)}`;
   else if (trav) btn.textContent = `Enregistrer ${fmt(dr.h)} (${fmt(ec, 1)})`;
   else btn.textContent = `Enregistrer : ${TYPES[dr.t]}`;
+  if (d > t0 && !btn.disabled) btn.textContent = btn.textContent.replace(/^(Valider ma journée|Enregistrer)/, 'Enregistrer en provisoire');
   if (c.e) {
     const same = c.e.t === dr.t && (dr.t !== 'trav' || c.e.h === dr.h) && (c.e.c || '') === (dr.c || '').trim();
-    if (same) { btn.textContent = '✓ Enregistré · ' + dayText(c); btn.classList.add('done'); }
+    if (same && c.e.prov && d <= t0) btn.textContent = 'Confirmer ma journée · ' + dayText(c);
+    else if (same) { btn.textContent = (c.e.prov ? '✓ Provisoire · ' : '✓ Enregistré · ') + dayText(c); btn.classList.add('done'); }
     const m = new Date(c.e.m);
-    $('#savedInfo').textContent = 'Saisi le ' + frc(m) + ' à ' + pad(m.getHours()) + 'h' + pad(m.getMinutes());
+    $('#savedInfo').textContent = 'Saisi le ' + frc(m) + ' à ' + pad(m.getHours()) + 'h' + pad(m.getMinutes()) + (c.e.prov ? ' · provisoire' : '');
   } else $('#savedInfo').textContent = c.p > 0 && d <= t0 ? 'Pas encore saisi' : '';
   $('#delBtn').classList.toggle('hide', !c.e);
 }
 
 /* ---------- Mois ---------- */
 function semaines(y, m) {
-  const P = periode(y, m), W = [];
-  for (let s = P.start; s <= P.end; s = addDays(s, 7)) {
+  const P = periode(y, m), W = [], ym = y * 12 + m;
+  const sum = (a, f) => a.reduce((t, c) => t + c[f], 0);
+  for (let s = monday(P.start); s <= P.end; s = addDays(s, 7)) {
     const jours = [0,1,2,3,4,5,6].map(i => calc(addDays(s, i)));
-    const T = jours.reduce((a, c) => a + c.h, 0), Pv = jours.reduce((a, c) => a + c.p, 0);
-    W.push({start: s, end: addDays(s, 6), n: isoWeek(s), jours, T, Pv,
-      plus: jours.reduce((a, c) => a + c.plus, 0), moins: jours.reduce((a, c) => a + c.moins, 0),
+    const mois = jours.filter(c => c.d >= P.start && c.d <= P.end);
+    const T = sum(jours, 'h'), pa = paieDe(s);
+    W.push({start: s, end: addDays(s, 6), n: isoWeek(s), jours, mois, T, Pv: sum(jours, 'p'),
+      Tm: sum(mois, 'h'), Pm: sum(mois, 'p'), plus: sum(mois, 'plus'), moins: sum(mois, 'moins'),
+      paie: pa, ici: pa.y * 12 + pa.m === ym, avant: jours.filter(c => c.d < P.start),
       t1: Math.min(Math.max(T - 35, 0), 4), t2: Math.max(T - 39, 0)});
   }
   return W;
 }
-function manquants(W) { const t0 = today(); return W.flatMap(w => w.jours.filter(c => !c.e && c.p > 0 && c.d <= t0)); }
+const jm = W => W.flatMap(w => w.mois);
+function manquants(W) { const t0 = today(); return jm(W).filter(c => !c.e && c.p > 0 && c.d <= t0); }
+const hsTxt = w => w.T > 35 ? fmt(w.t1) + ' (35→39 h)' + (w.t2 ? ' + ' + fmt(w.t2) + ' (au-delà de 39 h)' : '') : 'aucune';
 $('#mPrev').addEventListener('click', () => { let {y, m} = st.mois; m--; if (m < 0) { m = 11; y--; } st.mois = {y, m}; renderMois(); });
 $('#mNext').addEventListener('click', () => { let {y, m} = st.mois; m++; if (m > 11) { m = 0; y++; } st.mois = {y, m}; renderMois(); });
-$('#weeks').addEventListener('click', e => { const b = e.target.closest('[data-k]'); if (!b) return; const [y, m, d] = b.dataset.k.split('-').map(Number); go('saisie'); setDay(new Date(y, m - 1, d)); });
+$('#v-mois').addEventListener('click', e => { const b = e.target.closest('[data-k]'); if (!b) return; const [y, m, d] = b.dataset.k.split('-').map(Number); go('saisie'); setDay(new Date(y, m - 1, d)); });
 
 function renderMois() {
-  const {y, m} = st.mois, P = periode(y, m), W = semaines(y, m), miss = manquants(W), t0 = today();
+  const {y, m} = st.mois, W = semaines(y, m), J = jm(W), miss = manquants(W), t0 = today();
   $('#mTitle').textContent = MOIS[m] + ' ' + y;
-  $('#mSub').textContent = `Période de paie : du ${frc(P.start)} au ${frc(P.end)}`;
-  const T = W.reduce((a, w) => a + w.T, 0), plus = W.reduce((a, w) => a + w.plus, 0), moins = W.reduce((a, w) => a + w.moins, 0);
-  $('#kpis').innerHTML = `<div class="kpi"><b>${fmt(T)}</b><span>travaillées</span></div><div class="kpi"><b>${fmt(plus, 1)}</b><span>heures en plus</span></div><div class="kpi"><b>${moins ? fmt(-moins) : '0h00'}</b><span>heures en moins</span></div><div class="kpi ${miss.length ? 'alert' : ''}"><b>${miss.length}</b><span>jour${miss.length > 1 ? 's' : ''} à saisir</span></div>`;
+  $('#mSub').textContent = `Du 1er au ${new Date(y, m + 1, 0).getDate()} ${MOIS[m]}`;
+  const T = W.reduce((a, w) => a + w.Tm, 0), plus = W.reduce((a, w) => a + w.plus, 0), moins = W.reduce((a, w) => a + w.moins, 0);
+  const aconf = J.filter(c => c.e && c.e.prov && c.d <= t0), nbA = miss.length + aconf.length;
+  const labA = miss.length && aconf.length ? 'à saisir / confirmer' : aconf.length ? 'à confirmer' : 'à saisir';
+  $('#kpis').innerHTML = `<div class="kpi"><b>${fmt(T)}</b><span>travaillées</span></div><div class="kpi"><b>${fmt(plus, 1)}</b><span>HS+</span></div><div class="kpi"><b>${moins ? fmt(-moins) : '0h00'}</b><span>HS−</span></div><div class="kpi ${nbA ? 'alert' : ''}"><b>${nbA}</b><span>${labA}</span></div>`;
   $('#weeks').innerHTML = W.map(w => {
-    const rows = w.jours.filter(c => c.e || c.p > 0).map(c => {
-      const ms = !c.e && c.d <= t0, out = c.d.getMonth() !== m;
+    const rows = w.mois.filter(c => c.e || c.p > 0).map(c => {
+      const ms = !c.e && c.d <= t0;
       let s = ms ? 'À saisir' : c.e ? esc(dayText(c)) : '<small>à venir</small>';
+      if (c.e && c.e.prov) s += c.d <= t0 ? ' <small class="pv">à confirmer</small>' : ' <small>provisoire</small>';
+      const tx = S.tx[key(c.d)]; if (tx && !sameV(tx, val(c.d))) s += ' <small class="pv">modifié après envoi</small>';
       if (c.e && c.e.c) s += ` <small>· ${esc(c.e.c)}</small>`;
       const x = c.plus ? fmt(c.plus, 1) : c.moins ? fmt(-c.moins) : '';
-      return `<button class="row ${ms ? 'miss' : ''} ${out ? 'out' : ''}" data-k="${key(c.d)}"><span class="d">${JC[dow(c.d)]} ${c.d.getDate()}</span><span class="s">${s}</span><span class="x">${x}</span></button>`;
+      return `<button class="row ${ms ? 'miss' : ''}" data-k="${key(c.d)}"><span class="d">${JC[dow(c.d)]} ${c.d.getDate()}</span><span class="s">${s}</span><span class="x">${x}</span></button>`;
     }).join('');
-    const tr = w.T > 35 ? `<br>Au-delà de 35 h : <b>${fmt(w.t1)}</b> (35→39 h)${w.t2 ? ` + <b>${fmt(w.t2)}</b> (au-delà de 39 h)` : ''}` : '';
-    return `<div class="wk"><h3>Semaine ${w.n}<span>${frc(w.start)} → ${frc(w.end)}</span></h3>${rows || '<div class="row"><span class="d">—</span><span class="s"><small>Aucun jour prévu</small></span></div>'}
-      <div class="tot">Travaillé <b>${fmt(w.T)}</b> · prévu ${fmt(w.Pv)} · écart <b>${fmt(w.T - w.Pv, 1)}</b>${tr}</div></div>`;
+    const pm = MOIS[w.paie.m];
+    const tot = w.ici
+      ? `Semaine complète${w.avant.length ? ` (avec ${w.avant.length > 1 ? 'les jours' : 'le jour'} de fin ${MOIS[w.start.getMonth()]})` : ''} : travaillé <b>${fmt(w.T)}</b> · prévu ${fmt(w.Pv)} · écart <b>${fmt(w.T - w.Pv, 1)}</b><br>Au-delà de 35 h, paie de ${pm} : <b>${hsTxt(w)}</b>`
+      : `Ce mois-ci : travaillé <b>${fmt(w.Tm)}</b> · prévu ${fmt(w.Pm)}<br>Semaine à cheval : heures sup calculées sur la paie de ${pm}.`;
+    return `<div class="wk"><h3>Semaine ${w.n}<span>${frc(w.start)} → ${frc(w.end)}</span></h3>${rows || '<div class="row"><span class="d">—</span><span class="s"><small>Aucun jour prévu ce mois-ci</small></span></div>'}
+      <div class="tot">${tot}</div></div>`;
   }).join('');
+  // Récapitulatif du mois pour le salarié
+  const Pm = W.reduce((a, w) => a + w.Pm, 0), WP = W.filter(w => w.ici);
+  const t1 = WP.reduce((a, w) => a + w.t1, 0), t2 = WP.reduce((a, w) => a + w.t2, 0);
+  const encours = WP.some(w => w.end > t0) || J.some(c => c.e && c.e.prov);
+  const abs = {}; J.forEach(c => { if (c.e && c.e.t !== 'trav') abs[c.e.t] = (abs[c.e.t] || 0) + 1; });
+  const absTxt = Object.entries(abs).map(([k, v]) => `${TYPES[k]} : ${v} j`).join(' · ');
+  const li = (lab, v, cls, sub) => `<div class="li ${cls || ''}"><span>${lab}${sub ? `<small>${sub}</small>` : ''}</span><b>${v}</b></div>`;
+  $('#monthTot').innerHTML = `<div class="wk sum"><h3>Total du mois<span>${MOIS[m]} ${y}${encours ? ' · à ce jour' : ''}</span></h3>
+    ${li('Heures travaillées', fmt(T), 'big', 'prévu : ' + fmt(Pm))}
+    ${li('HS+ (heures en plus)', fmt(plus, 1))}
+    ${li('HS− (heures en moins)', moins ? fmt(-moins) : '0h00')}
+    ${li('Solde HS+ − HS−', fmt(plus - moins, 1), 'big')}
+    ${li('Heures sup 35→39 h', fmt(t1), 'hs', 'paie de ' + MOIS[m] + ' · semaines complètes du ' + frc(WP.length ? WP[0].start : new Date(y, m, 1)) + ' au ' + frc(WP.length ? WP[WP.length - 1].end : new Date(y, m + 1, 0)))}
+    ${li('Heures sup au-delà de 39 h', fmt(t2), 'hs', 'paie de ' + MOIS[m])}
+    ${absTxt ? li('Absences', esc(absTxt)) : ''}
+    ${!WP.every(w => w.mois.length === 7) || W.some(w => !w.ici) ? `<div class="tot">${W.some(w => !w.ici) ? `La semaine du ${frc(W[W.length - 1].start)} est à cheval sur ${MOIS[(m + 1) % 12]} : ses heures sup seront payées le mois prochain. ` : ''}${WP[0] && WP[0].avant.length ? `La 1re semaine inclut la fin ${MOIS[(m + 11) % 12]} pour le calcul des heures sup.` : ''}</div>` : ''}</div>`;
   $('#sendBtn').textContent = `Envoyer ma feuille de ${MOIS[m]}`;
-  const ym = y + '-' + pad(m + 1), env = S.envois[ym];
+  const ym = y + '-' + pad(m + 1), env = S.envois[ym], RG = regs(ym);
+  $('#regBox').innerHTML = RG.length ? `<div class="wk"><h3>Régularisations<span>${RG.length} jour${RG.length > 1 ? 's' : ''}</span></h3>${RG.map(x =>
+    `<button class="row" data-k="${x.k}"><span class="d">${JC[dow(x.d)]} ${frc(x.d)}</span><span class="s"><small>envoyé</small> ${esc(vText(x.old))} → ${esc(vText(x.now))}</span><span class="x">${fmt(x.now.h - x.old.h, 1)}</span></button>`).join('')}
+    <div class="tot">Journées de feuilles déjà envoyées, modifiées depuis : elles partiront avec cette feuille.</div></div>` : '';
   let txt = 'Pas encore envoyée.';
   if (env) {
     const e = new Date(env); txt = `Envoyée le ${frc(e)} à ${pad(e.getHours())}h${pad(e.getMinutes())}.`;
-    const modif = W.some(w => w.jours.some(c => c.e && c.e.m > env));
-    if (modif) txt += ' Des journées ont été modifiées depuis : pensez à la renvoyer.';
+    const own = Object.keys(S.tx).filter(k => ymOf(parseK(k)) === ym && !sameV(S.tx[k], val(parseK(k)))).length;
+    if (own) txt += ` ${own} journée${own > 1 ? 's' : ''} modifiée${own > 1 ? 's' : ''} depuis : elle${own > 1 ? 's partiront' : ' partira'} en régularisation avec la feuille suivante (ou renvoyez celle-ci).`;
   }
   $('#sendState').textContent = txt;
 }
@@ -447,36 +511,59 @@ function renderMois() {
 const slug = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const num = x => String(Math.round(x * 100) / 100).replace('.', ',');
 const q = s => /[;"\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-const ENTETE = ['Salarié','Mois de paie','Semaine','Date','Jour','Type','Prévu','Travaillé','H+','H−','Observation'];
+const ENTETE = ['Salarié','Mois','Semaine','Date','Jour','Type','Prévu','Travaillé','H+','H−','Observation','Statut','Travaillé transmis','Type transmis','Paie HS'];
+const ligne = (nom, c, statut, old) => { const pa = paieDe(c.d); return [nom, ymOf(c.d), isoWeek(c.d), fr(c.d), JOURS[dow(c.d)], c.e ? TYPES[c.e.t] : 'Non saisi', num(c.p), num(c.h), num(c.plus), num(c.moins), (c.e && c.e.c) || '', statut, old ? num(old.h || 0) : '', old ? TLAB(old.t) : '', pa.y + '-' + pad(pa.m + 1)]
+  .map(v => q(String(v))).join(';'); };
 function lignesCSV(y, m) {
-  const ym = y + '-' + pad(m + 1), nom = S.profil.nom;
-  return semaines(y, m).flatMap(w => w.jours.filter(c => c.e || c.p > 0).map(c =>
-    [nom, ym, w.n, fr(c.d), JOURS[dow(c.d)], c.e ? TYPES[c.e.t] : 'Non saisi', num(c.p), num(c.h), num(c.plus), num(c.moins), (c.e && c.e.c) || '']
-      .map(v => q(String(v))).join(';')));
+  const ym = y + '-' + pad(m + 1), nom = S.profil.nom, t0 = today(), W = semaines(y, m);
+  const stt = c => c.e ? (c.e.prov ? 'Provisoire' : 'Confirmé') : (c.d > t0 ? 'À venir' : 'Non saisi');
+  const L = jm(W).filter(c => c.e || c.p > 0).map(c => ligne(nom, c, stt(c)));
+  // Fin du mois précédent dans la 1re semaine : rappelée pour calculer les heures sup sur la semaine complète.
+  W.filter(w => w.ici).flatMap(w => w.avant).filter(c => c.e || c.p > 0).forEach(c => L.push(ligne(nom, c, 'Rappel')));
+  regs(ym).forEach(x => L.push(ligne(nom, calc(x.d), 'Régularisation', x.old)));
+  return L;
 }
-const csv = (y, m) => '﻿' + [ENTETE.join(';'), ...lignesCSV(y, m)].join('\r\n') + '\r\n';
+const csv = (y, m) => '\ufeff' + [ENTETE.join(';'), ...lignesCSV(y, m)].join('\r\n') + '\r\n';
 function recap(y, m, detail) {
-  const P = periode(y, m), W = semaines(y, m), miss = manquants(W), L = [];
-  L.push(`Feuille d'heures — ${S.profil.nom} — ${MOIS[m]} ${y}`, `Période de paie : du ${fr(P.start)} au ${fr(P.end)}`, '');
+  const W = semaines(y, m), J = jm(W), miss = manquants(W), L = [], last = new Date(y, m + 1, 0);
+  L.push(`Feuille d'heures — ${S.profil.nom} — ${MOIS[m]} ${y}`, `Du ${fr(new Date(y, m, 1))} au ${fr(last)}`, '');
   W.forEach(w => {
-    L.push(`Semaine ${w.n} (${frc(w.start)} → ${frc(w.end)}) : ${fmt(w.T)} travaillées, ${fmt(w.Pv)} prévues, écart ${fmt(w.T - w.Pv, 1)}` + (w.T > 35 ? ` [35→39 h : ${fmt(w.t1)}${w.t2 ? ` ; >39 h : ${fmt(w.t2)}` : ''}]` : ''));
-    if (detail) w.jours.filter(c => c.e).forEach(c => L.push(`   ${JC[dow(c.d)]} ${frc(c.d)} : ${dayText(c)}${c.plus ? ' (+' + fmt(c.plus) + ')' : ''}${c.moins ? ' (−' + fmt(c.moins) + ')' : ''}${c.e.c ? ' — ' + c.e.c : ''}`));
+    if (w.ici) L.push(`Semaine ${w.n} (${frc(w.start)} → ${frc(w.end)}), semaine complète : ${fmt(w.T)} travaillées, ${fmt(w.Pv)} prévues, écart ${fmt(w.T - w.Pv, 1)} — au-delà de 35 h, paie de ${MOIS[w.paie.m]} : ${hsTxt(w)}`);
+    else L.push(`Semaine ${w.n} (${frc(w.start)} → ${frc(w.end)}), à cheval : ${fmt(w.Tm)} travaillées ce mois-ci — heures sup calculées sur la paie de ${MOIS[w.paie.m]}`);
+    if (detail) w.mois.filter(c => c.e).forEach(c => L.push(`   ${JC[dow(c.d)]} ${frc(c.d)} : ${dayText(c)}${c.plus ? ' (+' + fmt(c.plus) + ')' : ''}${c.moins ? ' (−' + fmt(c.moins) + ')' : ''}${c.e.prov ? ' [provisoire]' : ''}${c.e.c ? ' — ' + c.e.c : ''}`));
   });
-  const T = W.reduce((a, w) => a + w.T, 0), plus = W.reduce((a, w) => a + w.plus, 0), moins = W.reduce((a, w) => a + w.moins, 0);
-  L.push('', `Total : ${fmt(T)} travaillées · heures en plus ${fmt(plus)} · heures en moins ${fmt(moins)}`);
-  const abs = {}; W.forEach(w => w.jours.forEach(c => { if (c.e && c.e.t !== 'trav') abs[TYPES[c.e.t]] = (abs[TYPES[c.e.t]] || 0) + 1; }));
+  const T = W.reduce((a, w) => a + w.Tm, 0), plus = W.reduce((a, w) => a + w.plus, 0), moins = W.reduce((a, w) => a + w.moins, 0);
+  const WP = W.filter(w => w.ici);
+  L.push('', `Total du mois : ${fmt(T)} travaillées · HS+ ${fmt(plus)} · HS− ${fmt(moins)} · solde ${fmt(plus - moins, 1)}`,
+    `Heures sup de la paie de ${MOIS[m]} (semaines complètes) : 35→39 h ${fmt(WP.reduce((a, w) => a + w.t1, 0))} · au-delà de 39 h ${fmt(WP.reduce((a, w) => a + w.t2, 0))}`);
+  const abs = {}; J.forEach(c => { if (c.e && c.e.t !== 'trav') abs[TYPES[c.e.t]] = (abs[TYPES[c.e.t]] || 0) + 1; });
   if (Object.keys(abs).length) L.push('Absences : ' + Object.entries(abs).map(([k, v]) => `${k} ${v} j`).join(', '));
-  L.push(miss.length ? 'Jours non saisis : ' + miss.map(c => JC[dow(c.d)] + ' ' + frc(c.d)).join(', ') : 'Tous les jours prévus sont saisis.');
+  L.push(miss.length ? 'Jours non saisis : ' + miss.map(c => JC[dow(c.d)] + ' ' + frc(c.d)).join(', ') : 'Tous les jours passés prévus sont saisis.');
+  const pv = J.filter(c => (c.e && c.e.prov) || (!c.e && c.p > 0 && c.d > today()));
+  if (pv.length) L.push('Jours provisoires ou à venir (régularisés le mois suivant si besoin) : ' + pv.map(c => JC[dow(c.d)] + ' ' + frc(c.d) + (c.e ? ' ' + dayText(c) : ' non saisi')).join(', '));
+  const RG = regs(y + '-' + pad(m + 1));
+  if (RG.length) { L.push('', 'Régularisations (feuilles déjà envoyées) :'); RG.forEach(x => L.push(`   ${JC[dow(x.d)]} ${frc(x.d)} (feuille de ${MOIS[x.d.getMonth()]}) : envoyé ${vText(x.old)} → réel ${vText(x.now)}, écart ${fmt(x.now.h - x.old.h, 1)}`)); }
   return L.join('\n');
 }
-function marquer(y, m) { S.envois[y + '-' + pad(m + 1)] = Date.now(); saveS(); renderMois(); }
+function marquer(y, m) {
+  const ym = y + '-' + pad(m + 1);
+  regs(ym).forEach(x => { S.tx[x.k] = x.now; });
+  jm(semaines(y, m)).forEach(c => { if (c.e || c.p > 0) S.tx[key(c.d)] = val(c.d); });
+  S.envois[ym] = Date.now(); saveS(); if (st.view === 'mois') renderMois();
+}
 
 $('#sendBtn').addEventListener('click', () => {
-  const {y, m} = st.mois, miss = manquants(semaines(y, m));
-  if (miss.length) ask(`${miss.length} jour${miss.length > 1 ? 's' : ''} non saisi${miss.length > 1 ? 's' : ''}`,
-    `<p>${miss.map(c => esc(JC[dow(c.d)] + ' ' + frc(c.d))).join(', ')}</p><p class="mute">Vous pouvez les compléter avant d'envoyer, ou envoyer quand même : ils apparaîtront « Non saisi ».</p>`,
-    [{label: 'Compléter d\'abord', cls: 'primary', fn: () => { go('saisie'); setDay(miss[0].d); }}, {label: 'Envoyer quand même', fn: () => setTimeout(() => envoyer(y, m), 50)}]);
-  else envoyer(y, m);
+  const {y, m} = st.mois, W = semaines(y, m), miss = manquants(W), t0 = today();
+  const pv = jm(W).filter(c => (c.e && c.e.prov) || (!c.e && c.p > 0 && c.d > t0));
+  if (!miss.length && !pv.length) { envoyer(y, m); return; }
+  const li = a => a.map(c => esc(JC[dow(c.d)] + ' ' + frc(c.d))).join(', ');
+  let h = '';
+  if (miss.length) h += `<p><b>Non saisis :</b> ${li(miss)}</p><p class="mute">Ils apparaîtront « Non saisi ».</p>`;
+  if (pv.length) h += `<p><b>Provisoires ou à venir :</b> ${li(pv)}</p><p class="mute">Ils partent tels quels. S'ils changent ensuite, l'écart sera envoyé automatiquement en régularisation avec la feuille suivante.</p>`;
+  const btns = [];
+  if (miss.length) btns.push({label: 'Compléter d\'abord', cls: 'primary', fn: () => { go('saisie'); setDay(miss[0].d); }});
+  btns.push({label: miss.length ? 'Envoyer quand même' : 'Envoyer', cls: miss.length ? 'second' : 'primary', fn: () => setTimeout(() => envoyer(y, m), 50)}, {label: 'Annuler'});
+  ask('Avant d\'envoyer', h, btns);
 });
 async function envoyer(y, m) {
   const nom = S.profil.nom, sujet = `Heures ${MOIS[m]} ${y} — ${nom}`, nomF = `Heures_${y}-${pad(m + 1)}_${slug(nom)}.csv`;
@@ -527,12 +614,12 @@ $('#bkIn').addEventListener('change', async e => {
     const o = JSON.parse(await f.text()); const d = o.data || o; if (!d.jours) throw 0;
     let n = 0; for (const [k, v] of Object.entries(d.jours)) { if (!S.jours[k] || (v.m || 0) > (S.jours[k].m || 0)) { S.jours[k] = v; n++; } }
     if (!S.profil && d.profil) S.profil = d.profil;
-    Object.assign(S.envois, d.envois || {}); saveS(); toast(n + ' journée(s) restaurée(s)'); go('reglages');
+    Object.assign(S.envois, d.envois || {}); for (const [k, v] of Object.entries(d.tx || {})) if (!S.tx[k]) S.tx[k] = v; saveS(); toast(n + ' journée(s) restaurée(s)'); go('reglages');
   } catch (err) { toast('Fichier de sauvegarde non reconnu'); }
   e.target.value = '';
 });
 $('#resetAll').addEventListener('click', () => ask('Réinitialiser l\'appli ?', '<p>Le profil et <b>toutes les heures saisies sur ce téléphone</b> seront effacés. Faites d\'abord une sauvegarde ou envoyez vos feuilles.</p>', [
-  {label: 'Tout effacer', cls: 'primary', fn: () => { S = {profil: null, jours: {}, envois: {}}; saveS(); st.draft = null; go('accueil'); }}, {label: 'Annuler'}]));
+  {label: 'Tout effacer', cls: 'primary', fn: () => { S = {profil: null, jours: {}, envois: {}, tx: {}}; saveS(); st.draft = null; go('accueil'); }}, {label: 'Annuler'}]));
 let deferredInstall = null;
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; if (st.view === 'reglages') renderReglages(); });
 $('#instBtn').addEventListener('click', async () => { if (!deferredInstall) return; deferredInstall.prompt(); try { await deferredInstall.userChoice; } catch (e) {} deferredInstall = null; renderReglages(); });
@@ -566,21 +653,18 @@ $('#mSave').addEventListener('click', () => {
   S.profil = {nom, email: '', horaires: [{du: '2000-01-01', j}]}; saveS(); st.draft = null; go('saisie');
 });
 $('#demoBtn').addEventListener('click', () => {
-  // Données réelles de la feuille papier d'octobre 2026 de Domingos (transcription).
-  const h = {'2026-10-01':10,'2026-10-02':5,'2026-10-05':10,'2026-10-06':11,'2026-10-07':11,'2026-10-08':10,'2026-10-09':5,'2026-10-12':10,'2026-10-13':10,'2026-10-14':10,'2026-10-15':10,'2026-10-19':9.75,'2026-10-20':9.75,'2026-10-21':9.75,'2026-10-22':9.75,'2026-10-26':9.75};
-  S = {profil: {nom: 'Domingos (démo)', email: '', horaires: [{du: '2000-01-01', j: [9.75, 9.75, 9.75, 9.75, 0, 0, 0]}]}, jours: {}, envois: {}};
+  // Données fictives de démonstration.
+  const h = {'2026-10-01':9.75,'2026-10-05':10.25,'2026-10-06':9.75,'2026-10-07':9.75,'2026-10-08':10.5,'2026-10-12':9.75,'2026-10-13':9.75,'2026-10-14':11,'2026-10-15':9.75,'2026-10-19':9.75,'2026-10-20':9.25,'2026-10-21':9.75,'2026-10-22':9.75,'2026-10-26':9.75};
+  S = {profil: {nom: 'Salarié exemple', email: '', horaires: [{du: '2000-01-01', j: [9.75, 9.75, 9.75, 9.75, 0, 0, 0]}]}, jours: {}, envois: {}, tx: {}};
   const t = new Date(2026, 9, 27, 17, 0).getTime();
   for (const [k, v] of Object.entries(h)) S.jours[k] = {t: 'trav', h: v, c: '', m: t};
-  S.jours['2026-10-12'].c = 'chiffre peu lisible sur la feuille papier';
+  S.jours['2026-10-14'].c = 'commande urgente';
+  S.jours['2026-10-09'] = {t: 'cp', c: '', m: t};
   saveS(); st.mois = {y: 2026, m: 9}; st.draft = null; go('mois');
 });
 
 /* ---------- Espace responsable ---------- */
-let A = load(AKEY, null) || {email: '', emps: [
-  {nom: 'Antonin', j: [8.75, 8.75, 8.75, 8.75, 0, 0, 0]}, {nom: 'Domingos', j: [9.75, 9.75, 9.75, 9.75, 0, 0, 0]},
-  {nom: 'Laure', j: [8.75, 8.75, 8.75, 8.75, 0, 0, 0]}, {nom: 'Laureline', j: [8.75, 8.75, 8.75, 8.75, 0, 0, 0]},
-  {nom: 'Marie-Rose', j: [8.75, 8.75, 8.75, 8.75, 0, 0, 0]}, {nom: 'Martine', j: [8.75, 8.75, 8.75, 8.75, 0, 0, 0]},
-  {nom: 'Sabrina', j: [8, 9, 9, 9, 0, 0, 0]}]};
+let A = load(AKEY, null) || {email: '', emps: [{nom: '', j: [8.75, 8.75, 8.75, 8.75, 0, 0, 0]}]};
 const saveA = () => store(AKEY, A);
 const base = () => location.href.split('#')[0];
 const lien = e => base() + '#cfg=' + b64e(JSON.stringify({v: 1, nom: e.nom, email: A.email, du: $('#aDu').value || key(today()), j: e.j}));
@@ -627,32 +711,50 @@ function parseCSV(t) {
 let cFiles = [];
 $('#cIn').addEventListener('change', async e => { cFiles = await Promise.all([...e.target.files].map(f => f.text())); toast(cFiles.length + ' fichier(s) chargé(s)'); runConso(); });
 $('#cRun').addEventListener('click', runConso);
-let consoRows = [], consoSum = [];
+let consoRows = [], consoSum = [], consoReg = [];
 function runConso() {
-  const nb = s => parseFloat(String(s).replace(',', '.')) || 0;
-  const map = new Map();
-  [...cFiles, $('#cTxt').value].forEach(t => parseCSV(t || '').forEach(r => map.set(r[0] + '|' + r[3], r)));
-  consoRows = [...map.values()].sort((a, b) => a[0].localeCompare(b[0]) || a[3].split('/').reverse().join().localeCompare(b[3].split('/').reverse().join()));
-  if (!consoRows.length) { $('#cOut').innerHTML = '<p class="mute">Aucune ligne reconnue.</p>'; return; }
-  const P = new Map(), W = new Map();
+  const nb = s => parseFloat(String(s ?? '').replace(',', '.')) || 0;
+  const dk = s => s.split('/').reverse().join('');
+  const map = new Map(), rmap = new Map(), rap = new Map();
+  [...cFiles, $('#cTxt').value].forEach(t => parseCSV(t || '').forEach(r => (r[11] === 'Régularisation' ? rmap : r[11] === 'Rappel' ? rap : map).set(r[0] + '|' + r[3], r)));
+  const srt = (a, b) => a[0].localeCompare(b[0]) || dk(a[3]).localeCompare(dk(b[3]));
+  consoRows = [...map.values()].sort(srt); consoReg = [...rmap.values()].sort(srt);
+  if (!consoRows.length && !consoReg.length) { $('#cOut').innerHTML = '<p class="mute">Aucune ligne reconnue.</p>'; return; }
+  const P = new Map();
   consoRows.forEach(r => {
     const k = r[0] + '|' + r[1];
-    const p = P.get(k) || {nom: r[0], mois: r[1], j: 0, ns: 0, T: 0, Pv: 0, plus: 0, moins: 0, cp: 0, mal: 0, abs: 0, aut: 0, t1: 0, t2: 0};
-    if (r[5] === 'Non saisi') p.ns++; else p.j++;
+    const p = P.get(k) || {nom: r[0], mois: r[1], j: 0, ns: 0, prov: 0, T: 0, Pv: 0, plus: 0, moins: 0, cp: 0, mal: 0, abs: 0, aut: 0, t1: 0, t2: 0};
+    if (r[11] === 'À venir' || r[11] === 'Provisoire') p.prov++;
+    if (r[5] !== 'Non saisi') p.j++; else if (r[11] !== 'À venir') p.ns++;
     p.T += nb(r[7]); p.Pv += nb(r[6]); p.plus += nb(r[8]); p.moins += nb(r[9]);
     if (r[5] === TYPES.cp) p.cp++; if (r[5] === TYPES.mal) p.mal++; if (r[5] === TYPES.abs) p.abs++; if (r[5] === TYPES.fer || r[5] === TYPES.aut) p.aut++;
     P.set(k, p);
-    const wk = k + '|' + r[2]; W.set(wk, (W.get(wk) || 0) + nb(r[7]));
   });
-  W.forEach((T, wk) => { const p = P.get(wk.split('|').slice(0, 2).join('|')); p.t1 += Math.min(Math.max(T - 35, 0), 4); p.t2 += Math.max(T - 39, 0); });
+  // Heures sup : semaines complètes, rattachées à la paie du mois de leur dimanche.
+  // Les jours de fin du mois précédent viennent des lignes « Rappel » si la feuille précédente n'est pas chargée.
+  const tous = new Map(rap); map.forEach((r, k) => tous.set(k, r));
+  const W = new Map();
+  tous.forEach(r => { const d = parseFR(r[3]), pa = r[14] || ymOf(addDays(monday(d), 6)), wk = r[0] + '|' + pa + '|' + key(monday(d)); W.set(wk, (W.get(wk) || 0) + nb(r[7])); });
+  W.forEach((T, wk) => { const [nom, pa] = wk.split('|'), p = P.get(nom + '|' + pa); if (p) { p.t1 += Math.min(Math.max(T - 35, 0), 4); p.t2 += Math.max(T - 39, 0); } });
   consoSum = [...P.values()];
-  const cols = [['Salarié', 'nom'], ['Mois', 'mois'], ['Jours saisis', 'j'], ['Non saisis', 'ns'], ['Travaillé', 'T', 1], ['Prévu', 'Pv', 1], ['H+', 'plus', 1], ['H−', 'moins', 1], ['HS 35→39', 't1', 1], ['HS >39', 't2', 1], ['CP (j)', 'cp'], ['Maladie (j)', 'mal'], ['Abs. non payée (j)', 'abs'], ['Férié/autre (j)', 'aut']];
-  $('#cOut').innerHTML = `<p class="mute">${consoRows.length} lignes, ${consoSum.length} feuille(s).</p><div class="scroll"><table><thead><tr>${cols.map(c => `<th class="${c[2] || typeof consoSum[0][c[1]] === 'number' ? 'n' : ''}">${c[0]}</th>`).join('')}</tr></thead><tbody>${consoSum.map(p => `<tr>${cols.map(c => {
+  const cols = [['Salarié', 'nom'], ['Mois', 'mois'], ['Jours saisis', 'j'], ['Non saisis', 'ns'], ['Provisoires / à venir', 'prov'], ['Travaillé', 'T', 1], ['Prévu', 'Pv', 1], ['H+', 'plus', 1], ['H−', 'moins', 1], ['HS 35→39 (paie)', 't1', 1], ['HS >39 (paie)', 't2', 1], ['CP (j)', 'cp'], ['Maladie (j)', 'mal'], ['Abs. non payée (j)', 'abs'], ['Férié/autre (j)', 'aut']];
+  const hv = (t, h) => t === 'Travaillé' ? fmt(nb(h)) : t;
+  let html = `<p class="mute">${consoRows.length} lignes, ${consoSum.length} feuille(s)${consoReg.length ? ', ' + consoReg.length + ' régularisation(s)' : ''}.</p>`;
+  if (consoSum.length) html += `<div class="scroll"><table><thead><tr>${cols.map(c => `<th class="${typeof consoSum[0][c[1]] === 'number' ? 'n' : ''}">${c[0]}</th>`).join('')}</tr></thead><tbody>${consoSum.map(p => `<tr>${cols.map(c => {
     const v = p[c[1]]; return typeof v === 'number' ? `<td class="n">${c[2] ? fmt(v) : v}</td>` : `<td>${esc(v)}</td>`; }).join('')}</tr>`).join('')}</tbody></table></div>
+    <p class="mute">Jours, heures et absences : du 1er au dernier jour du mois. Heures sup : semaines complètes dont le dimanche tombe dans le mois (la semaine à cheval sur la fin du mois est comptée le mois suivant).</p>
     <button class="second" id="cCopyS">Copier la synthèse (pour Excel)</button><button class="second" id="cCopyD">Copier le détail jour par jour (pour Excel)</button>`;
-  const tsv = (head, rows) => [head.join('\t'), ...rows.map(r => r.join('\t'))].join('\n');
-  $('#cCopyS').addEventListener('click', async () => { try { await navigator.clipboard.writeText(tsv(cols.map(c => c[0]), consoSum.map(p => cols.map(c => typeof p[c[1]] === 'number' ? num(p[c[1]]) : p[c[1]])))); toast('Synthèse copiée'); } catch (e) { toast('Copie impossible'); } });
-  $('#cCopyD').addEventListener('click', async () => { try { await navigator.clipboard.writeText(tsv(ENTETE, consoRows.map(r => r.map(x => x.replace(/[\t\n]/g, ' '))))); toast('Détail copié'); } catch (e) { toast('Copie impossible'); } });
+  if (consoReg.length) html += `<h2>Régularisations reçues</h2><p class="mute">Journées de mois déjà transmis, corrigées depuis (saisies provisoires, oublis, erreurs). À reporter sur la paie en cours.</p>
+    <div class="scroll"><table><thead><tr><th>Salarié</th><th>Date</th><th>Paie d'origine</th><th>Envoyé</th><th>Réel</th><th class="n">Écart</th></tr></thead><tbody>${consoReg.map(r =>
+    `<tr><td>${esc(r[0])}</td><td>${esc(r[3])}</td><td>${esc(r[1])}</td><td>${esc(hv(r[13], r[12]))}</td><td>${esc(hv(r[5], r[7]))}</td><td class="n">${fmt(nb(r[7]) - nb(r[12]), 1)}</td></tr>`).join('')}</tbody></table></div>
+    <button class="second" id="cCopyR">Copier les régularisations (pour Excel)</button>`;
+  $('#cOut').innerHTML = html;
+  const tsv = (head, rows) => [head.join('\t'), ...rows.map(r => r.map(x => String(x ?? '').replace(/[\t\n]/g, ' ')).join('\t'))].join('\n');
+  const cp = async (txt, msg) => { try { await navigator.clipboard.writeText(txt); toast(msg); } catch (e) { toast('Copie impossible'); } };
+  $('#cCopyS')?.addEventListener('click', () => cp(tsv(cols.map(c => c[0]), consoSum.map(p => cols.map(c => typeof p[c[1]] === 'number' ? num(p[c[1]]) : p[c[1]]))), 'Synthèse copiée'));
+  $('#cCopyD')?.addEventListener('click', () => cp(tsv(ENTETE, consoRows), 'Détail copié'));
+  $('#cCopyR')?.addEventListener('click', () => cp(tsv(['Salarié', 'Date', 'Paie d\'origine', 'Type envoyé', 'Travaillé envoyé', 'Type réel', 'Travaillé réel', 'Écart (h)'],
+    consoReg.map(r => [r[0], r[3], r[1], r[13], r[12], r[5], r[7], num(nb(r[7]) - nb(r[12]))])), 'Régularisations copiées'));
 }
 
 /* ---------- Démarrage ---------- */
